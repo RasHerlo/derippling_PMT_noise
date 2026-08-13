@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local exploratory previews (large; regenerate if needed)
+examples/
+
+# Empty / unused local dirs
+vendor/
