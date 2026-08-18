@@ -131,13 +131,13 @@ def clean_frame_v21(
     ratio_start=1.6,
     ratio_full=4.0,
     max_alpha=0.85,
-    max_alpha_high=0.97,
+    max_alpha_high=1.00,
     high_gate=0.95,
-    high_strength=0.22,
-    strength_span=0.15,
+    high_strength=0.18,
+    strength_span=0.12,
     residual_pass=True,
-    residual_strength_min=0.08,
-    residual_alpha=0.70,
+    residual_strength_min=0.05,
+    residual_alpha=0.95,
     y_sigma=1.0,
     y_radius=2,
 ):
@@ -276,25 +276,25 @@ def main():
     ap.add_argument(
         "--max-alpha-high",
         type=float,
-        default=0.97,
+        default=1.00,
         help="High-confidence ceiling (gate high + strong paired peaks)",
     )
     ap.add_argument("--high-gate", type=float, default=0.95)
     ap.add_argument(
         "--high-strength",
         type=float,
-        default=0.22,
+        default=0.18,
         help="Min ridge strength to unlock high-alpha blend (just above soft gate)",
     )
     ap.add_argument(
         "--strength-span",
         type=float,
-        default=0.15,
+        default=0.12,
         help="Strength range above --high-strength over which alpha ramps to max-alpha-high",
     )
     ap.add_argument("--no-residual-pass", action="store_true")
-    ap.add_argument("--residual-strength-min", type=float, default=0.08)
-    ap.add_argument("--residual-alpha", type=float, default=0.70)
+    ap.add_argument("--residual-strength-min", type=float, default=0.05)
+    ap.add_argument("--residual-alpha", type=float, default=0.95)
 
     args = ap.parse_args()
     if not args.analyze_only and not args.output:

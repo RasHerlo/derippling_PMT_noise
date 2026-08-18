@@ -1,99 +1,102 @@
-# Progress handoff — 2026-08-13
+# Progress handoff — 2026-08-18
 
-Resume point for continuing PMT fringe derippling work.
+Resume point for PMT fringe derippling (this repo only).  
+Overview collector: https://github.com/RasHerlo/figure_for_cAMP_Neu_paper  
+→ reads `notes/OPTIMIZATION_STATUS.md` + `notes/optimization_manifest.json`
 
 ## Goal (unchanged)
 
-Remove intermittent, spatially drifting PMT fringe from microscopy TIFF stacks in post-processing:
-
 ```text
-raw → defringe → SUPPORT
+raw → defringe (v2.1 pack_B) → SUPPORT (retrain) → suite2p MC / segment
 ```
 
-Preferences: **raw-only** detection/cleaning (no SUPPORT before defringe), minimal biological artifacts, residual fringe on strong frames ideally **&lt;5–10%**.
+Preferences: **raw-only** detection/cleaning, minimal biological artifacts, strong-frame residual fringe ideally **&lt;5–10%**.
 
-## Leading method now
+## Leading method
 
-**GPT raw-adaptive v2.1** — `reference/gpt/pmt_fringe_raw_adaptive_v21.py`
+**GPT raw-adaptive v2.1 `pack_B`** — `reference/gpt/pmt_fringe_raw_adaptive_v21.py`
 
-Builds on v2 (`pmt_fringe_raw_adaptive.py`):
-1. Confidence-scaled `max_alpha`: keep 0.85 for partial confidence; ramp to 0.97 when `gate ≥ 0.95`, paired, and `strength ≥ 0.22` (span 0.15).
-2. Residual second pass if paired ridge still above local background (`residual_strength_min=0.08`, `residual_alpha=0.70`).
-3. Weak/absent fringe (`gate=0`) still unmodified.
-
-Re-score script: `rescore_v21.py`  
-Summary on disk:  
-`...\cursor tests\SUMMARY_gpt_raw_adaptive_v21.md`
-
-## Latest 500-frame residual scores
-
-Metric: median fringe-specific excess power(cleaned) / excess(raw) in tracked PMT ridge segments.
-
-| Set | ChanA v2 → v2.1 | ChanB v2 → v2.1 |
-|---|---|---|
-| gate > 0.5 | 16.0% → **13.7%** | 7.3% → **3.9%** |
-| strongest 25% | 13.6% → **10.6%** | 4.8% → **2.0%** |
-
-- Gate≈0 removed RMS = 0 on both channels (safety preserved).
-- ChanB meets the &lt;5–10% strong-frame target; ChanA improved but is still slightly above on strongest frames.
-
-500fr detections (stable):
-- ChanA: `q≈14 / hi≈242`, fx ≈ ±10–38  
-- ChanB: `q≈60 / hi≈196`, fx ≈ ±10–41  
-
-## Critical finding: full-stack ChanA used wrong family
-
-Existing production defringe (5400 frames) locked onto different `q` than the clear 500fr signature:
-
-| Stack | 500fr test family | Full-stack v2 family |
-|---|---|---|
-| ChanA | **q=14** | **q=6** (weak; little/no removal on early frames) |
-| ChanB | q=60 | q=53 (close; still useful) |
-
-On the matching 500fr prefix, full ChanA defringe left **~100%** residual at the real q=14 ridge. ChanB full defringe left ~6–14% depending on family definition; SUPPORT then drops apparent ridge excess further (~1%).
-
-**Implication:** re-defringe full ChanA/ChanB stacks with **v2.1** before another SUPPORT pass / retrain. Do not trust current `ChanA_stk_defringed.tif` as “clean” for the real fringe.
-
-## Data locations
-
-Base: `F:\bPACNewData2026\260511\C1_RLV_LW_maybe\LED_x15_Level3b\DATA\`
-
-| What | Path |
+| Knob | Value |
 |---|---|
-| Raw 500fr tests | `SUPPORT_ChanB\to build FFT deripple\raw test files\ChanA/B_raw_500fr.tif` |
-| Cursor test outputs / PDFs | `SUPPORT_ChanB\to build FFT deripple\cursor tests\` |
-| Full raw | `ChanA\ChanA_stk.tif`, `ChanB\ChanB_stk.tif` |
-| Current (v2) defringed | `ChanA_defringe\ChanA_stk_defringed.tif`, `ChanB_defringe\...` |
-| SUPPORT on defringed | `ChanA_defringe\SUPPORT\ChanA_stk_defringed_denoised.tif` (same for B) |
-| Original SUPPORT (no defringe) | `SUPPORT_ChanA\denoised_cut.tif`, `SUPPORT_ChanB\denoised_cut.tif` |
+| `max_alpha` | 0.85 (partial confidence) |
+| `max_alpha_high` | 1.00 |
+| `high_gate` / `high_strength` / `strength_span` | 0.95 / 0.18 / 0.12 |
+| `residual_strength_min` / `residual_alpha` | 0.05 / 0.95 |
 
-## Suggested next steps (priority order)
+Weak/absent fringe (`gate=0`) unmodified.
 
-1. **Re-defringe full 5400-frame ChanA + ChanB with v2.1**  
-   - Prefer writing to new outputs (e.g. `*_defringed_v21.tif`) so old v2 results remain for comparison.  
-   - Watch ChanA detection: should prefer ~q=14 family if present; investigate why full-stack median spectrum preferred q=6 (sampling / row_z / drift).
-2. **Spot-check residual ridge power** on full stacks (or another 500fr slice mid-experiment), especially ChanA mid-FOV after SUPPORT.
-3. **Retrain SUPPORT / `model_10` on v2.1-defringed data** — do not skip; old model was trained on fringed distribution and can unmask/amplify residual periods.
-4. Optional ChanA push if still &gt;10% on strongest frames after full-stack v2.1: tighten residual pass or slightly raise high-confidence aggression **without** widening full rows / global threshold drops.
-5. Repo streamline (deferred): prune bake-off clutter; keep v2.1 + notes + key runners.
+## Where we are (2026-08-18)
 
-## Reminder
+| Milestone | Status |
+|---|---|
+| 500fr sweep → accept `pack_B` | done |
+| Stack averages (tif + inferno png) | done — under `accepted/pack_B/` |
+| Injection stress (α=1) | done — `defringe_runs/v21_packB_injection/` |
+| Full 5400-frame stacks | done — **seeded from 500fr families** |
+| Promote for suite2p | done — `inputs/defringed_v21/` |
 
-**Retrain SUPPORT on defringed data** after v2.1 full-stack re-defringe.
+### Full-stack detection caveat (important)
 
-## Key repo files
+Naive detect on all 5400 frames prefers ChanA **q=6** (weak). Correct approach: seed families from 500fr slices (**ChanA q=14**, **ChanB q=60**), then track+clean the full raw. Script: `run_full_v21_seeded500.py`.
+
+**Do not use** sandbox `inputs/defringed` (legacy v2 / wrong ChanA q).
+
+### Metrics snapshot
+
+500fr residual ridge excess after `pack_B` (median):
+
+| | gate>0.5 | strongest 25% | gate0 RMS |
+|---|---:|---:|---:|
+| ChanA | 11.7% | 9.3% | 0 |
+| ChanB | 3.4% | 1.8% | 0 |
+
+Injection α=1 (`packB_residual`): ChanA E_rec≈3.8 / remain≈9%; ChanB E_rec≈4.9 / remain≈2%.
+
+## Shared sandbox
+
+`F:\bPACNewData2026\PreProcessing Optimization\Level3b copy\`
 
 | Path | Role |
 |---|---|
-| `reference/gpt/pmt_fringe_raw_adaptive_v21.py` | Leading cleaner |
-| `reference/gpt/pmt_fringe_raw_adaptive.py` | v2 baseline |
-| `rescore_v21.py` | 500fr clean + residual rescore vs v2 |
-| `stress_test_v2.py` | Injection / continuity (v2 defaults) |
-| `compare_support_blocks.py` | SUPPORT block/seam compare |
-| `notes/PROGRESS.md` | This handoff |
+| `inputs/raw/` | Full raw (do not rename; suite2p may use) |
+| `inputs/defringed/` | **Legacy v2 — do not use for new tests** |
+| `inputs/defringed_v21/` | **Current SOTA full stacks for suite2p** |
+| `inputs/slices_500fr/raw/` | Fast 500fr loops |
+| `defringe_runs/v21_sweep_500fr/accepted/pack_B/` | Winner 500fr + avgs |
+| `defringe_runs/v21_packB_injection/` | Injection stress |
+| `defringe_runs/v21_full_seeded500/` | Full-stack run + STATUS |
+| `mc_runs/` | suite2p only — do not touch |
+| `support_runs/` | SUPPORT agent writes here |
 
-## Design constraints still in force
+## Suite2p handoff (copy-paste)
 
-- Prefer not widening full FFT rows or globally lowering detection thresholds first.
-- Optimize especially ChanA and mid-FOV residual visibility after SUPPORT.
-- Keep “do nothing when fringe absent” as a hard safety property.
+Use these stacks for comparative segmentation / MC:
+
+```text
+...\Level3b copy\inputs\defringed_v21\ChanA\ChanA_stk_defringed_v21.tif
+...\Level3b copy\inputs\defringed_v21\ChanB\ChanB_stk_defringed_v21.tif
+```
+
+Do not use `inputs/defringed`. Do not touch `mc_runs/`.
+
+## SUPPORT handoff
+
+See `notes/HANDOFF_SUPPORT.md`. Prefer pack_B / `defringed_v21` over SUPPORT-on-raw for compares; **retrain** still needed after full-stack promote.
+
+## Next steps
+
+1. Suite2p comparative tests on `inputs/defringed_v21/` (other agent).
+2. SUPPORT inference compare on pack_B vs raw (`support_runs/`); then retrain on full `defringed_v21`.
+3. Optional: spot-check residual ridge power on full seeded stacks; harden detection so full-stack median does not need 500fr seed.
+4. Repo streamline (deferred).
+
+## Key scripts
+
+| Script | Role |
+|---|---|
+| `reference/gpt/pmt_fringe_raw_adaptive_v21.py` | Leading cleaner (`pack_B` defaults) |
+| `sweep_v21_500fr.py` | High-confidence param sweep |
+| `injection_packB_500fr.py` | Injection stress |
+| `run_full_v21_seeded500.py` | Full-stack with 500fr-seeded families |
+| `write_stack_averages.py` | Mean tif + inferno png |
+| `score_sandbox_v21_500fr.py` | Residual ridge score on sandbox 500fr |

@@ -10,7 +10,7 @@ Remove periodic PMT / scan-electronics fringe noise from imaging stacks, then
 `reference/gpt/pmt_fringe_raw_adaptive_v21.py`
 
 Same architecture as v2 (`pmt_fringe_raw_adaptive.py`), plus:
-- confidence-scaled `max_alpha` (0.85 → up to 0.97 when gate/strength are high)
+- confidence-scaled `max_alpha` (0.85 → up to 1.00 when gate/strength are high; `pack_B` defaults)
 - residual second pass on surviving paired ridges
 
 Recommended production flow:
@@ -54,5 +54,8 @@ Bake-off / stress / SUPPORT compare outputs were written next to the data under:
 
 ## Notes
 
+- **Status for the overview repo** ([figure_for_cAMP_Neu_paper](https://github.com/RasHerlo/figure_for_cAMP_Neu_paper)): read `notes/OPTIMIZATION_STATUS.md` + `notes/optimization_manifest.json` (this repo only; overview collects).
+- Progress handoff: `notes/PROGRESS.md`
+- SUPPORT agent card: `notes/HANDOFF_SUPPORT.md`
 - Claude excerpts: `notes/claude_share_excerpts.md`
 - GPT reference scripts: `reference/gpt/`
