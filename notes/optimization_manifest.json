@@ -4,89 +4,77 @@
   "overview_repo": "https://github.com/RasHerlo/figure_for_cAMP_Neu_paper",
   "overview_note": "Overview repo pulls from this manifest; do not push catalog edits from deripple agents.",
   "sandbox_root": "F:\\bPACNewData2026\\PreProcessing Optimization\\Level3b copy",
-  "updated": "2026-08-18",
+  "updated": "2026-08-19",
   "current_approach": {
-    "id": "gpt_raw_adaptive_v21_pack_B",
-    "script": "reference/gpt/pmt_fringe_raw_adaptive_v21.py",
-    "status": "accepted_on_500fr_and_full_stack_seeded500",
+    "id": "gpt_raw_adaptive_v22_pack_D",
+    "script": "reference/gpt/pmt_fringe_raw_adaptive_v22.py",
+    "status": "accepted_on_500fr_full_stack_running_or_done",
     "promoted_to_full_stack": true,
     "full_stack_method": "seeded_from_500fr_families",
-    "full_stack_script": "run_full_v21_seeded500.py",
+    "full_stack_script": "run_full_v22_seeded500.py",
+    "supersedes": "gpt_raw_adaptive_v21_pack_B",
     "params": {
       "max_alpha": 0.85,
       "max_alpha_high": 1.0,
       "high_gate": 0.95,
-      "high_strength": 0.18,
+      "high_strength": 0.15,
       "strength_span": 0.12,
       "residual_pass": true,
-      "residual_strength_min": 0.05,
-      "residual_alpha": 0.95
+      "residual_strength_min": 0.03,
+      "residual_alpha": 1.0,
+      "ratio_start": 1.4,
+      "ratio_full": 3.5
     },
-    "metrics_500fr": {
+    "metrics_500fr_vs_pack_B": {
       "ChanA": {
-        "remaining_strongest25_pct": 9.26,
-        "remaining_gate_gt_0.5_pct": 11.73,
+        "pack_B_strongest25_pct": 9.26,
+        "pack_D_strongest25_pct": 6.94,
+        "pack_B_gate_gt_0.5_pct": 11.73,
+        "pack_D_gate_gt_0.5_pct": 9.10,
         "gate0_removed_rms": 0.0,
         "family_q": [14.0, 242.0]
       },
       "ChanB": {
-        "remaining_strongest25_pct": 1.77,
-        "remaining_gate_gt_0.5_pct": 3.38,
+        "pack_B_strongest25_pct": 1.77,
+        "pack_D_strongest25_pct": 1.42,
         "gate0_removed_rms": 0.0,
         "family_q": [60.0, 196.0]
       }
     },
-    "injection_alpha1_packB_residual": {
-      "ChanA": {"E_recovery_median": 3.76, "remaining_fringe_band_frac": 0.092},
-      "ChanB": {"E_recovery_median": 4.93, "remaining_fringe_band_frac": 0.022}
+    "injection_chanA_alpha1": {
+      "pack_B": {"E_recovery_median": 3.536, "remaining_frac": 0.083},
+      "pack_D": {"E_recovery_median": 3.496, "remaining_frac": 0.078}
     },
     "pros": [
-      "raw-only detection and cleaning",
-      "gate≈0 frames unmodified",
-      "narrow ridge segments (safer than full-row notches)",
-      "PMT-agnostic family detection on 500fr",
-      "ChanB residual well under 5-10% target on strong frames",
-      "full stacks promoted for suite2p under inputs/defringed_v21"
+      "same safe architecture as v2.1",
+      "material ChanA residual reduction without gate0 spoilage",
+      "ChanB non-regressing / slightly better",
+      "injection E_recovery not increased"
     ],
     "cons": [
-      "ChanA residual still near ~9-12% on strong frames",
-      "full-stack median detect still prefers weak ChanA q≈6 — must seed from 500fr",
-      "high-confidence aggression can slightly affect shared FFT bins on strong frames",
-      "SUPPORT retrain still required before claiming end-to-end cleanliness"
+      "softer ratio_* increases notch aggressiveness on moderate bins",
+      "still requires 500fr seed for full-stack ChanA family",
+      "SUPPORT retrain still required"
     ],
     "artifacts": {
       "status_doc": "notes/OPTIMIZATION_STATUS.md",
       "progress_doc": "notes/PROGRESS.md",
-      "accepted_500fr": "defringe_runs/v21_sweep_500fr/accepted/pack_B",
-      "injection": "defringe_runs/v21_packB_injection",
-      "full_stack_run": "defringe_runs/v21_full_seeded500",
-      "promoted_inputs": "inputs/defringed_v21"
+      "sweep": "defringe_runs/v22_sweep_500fr",
+      "accepted_500fr": "defringe_runs/v22_sweep_500fr/accepted/pack_D",
+      "full_stack_run": "defringe_runs/v22_full_seeded500",
+      "promoted_inputs": "inputs/defringed_v22",
+      "previous_promoted": "inputs/defringed_v21"
     }
   },
   "approaches_tried": [
-    {
-      "id": "rowband_claude",
-      "status": "demoted",
-      "one_liner": "Full harmonic row notches — strong removal, over-filters weak frames"
-    },
-    {
-      "id": "gpt_point_notch_v1",
-      "status": "demoted",
-      "one_liner": "Discrete peak notches — safer, under-removes dense ridges"
-    },
-    {
-      "id": "gpt_raw_adaptive_v2",
-      "status": "superseded_by_v21",
-      "one_liner": "Ridge-segment adaptive — leading architecture, conservative max_alpha=0.85"
-    },
-    {
-      "id": "gpt_raw_adaptive_v21_pack_B",
-      "status": "current",
-      "one_liner": "v2 + confidence-scaled alpha + residual pass; pack_B defaults; full stacks seeded from 500fr"
-    }
+    {"id": "rowband_claude", "status": "demoted", "one_liner": "Full harmonic row notches"},
+    {"id": "gpt_point_notch_v1", "status": "demoted", "one_liner": "Discrete peak notches"},
+    {"id": "gpt_raw_adaptive_v2", "status": "superseded", "one_liner": "Conservative ridge adaptive"},
+    {"id": "gpt_raw_adaptive_v21_pack_B", "status": "superseded_by_v22", "one_liner": "Confidence-scaled + residual pass"},
+    {"id": "gpt_raw_adaptive_v22_pack_D", "status": "current", "one_liner": "Stronger residual + softer ratio thresholds"}
   ],
   "handoffs": {
-    "support": "notes/HANDOFF_SUPPORT.md",
-    "suite2p": "Use inputs/defringed_v21/*_stk_defringed_v21.tif; do not use inputs/defringed; do not touch mc_runs/"
+    "support": "notes/HANDOFF_SUPPORT.md — retrain on inputs/defringed_v22",
+    "suite2p": "notes/HANDOFF_SUITE2P.md — MC on inputs/defringed_v22"
   }
 }
