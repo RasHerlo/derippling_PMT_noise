@@ -1,0 +1,218 @@
+{
+  "root": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent",
+  "recordings": [
+    {
+      "label": "PC050",
+      "name": "PC050",
+      "date_utc": "2026-02-14T17:47:28+00:00",
+      "computer": "THORLABS_30_016",
+      "scope": "Shinano",
+      "status": "Complete",
+      "aborted": false,
+      "config_key": "THORLABS_30_016|512x512|fr29.595|fs178.0|px0.935|scanMode0|avg0x2",
+      "pockels_setting": 50,
+      "scan": {
+        "scanMode": 0,
+        "areaMode": 0,
+        "pixelX": 512,
+        "pixelY": 512,
+        "fieldSize": 178.0,
+        "pixelSizeUM": 0.935,
+        "frameRate": 29.595,
+        "dwellTime": 0.08,
+        "flybackCycles": 12,
+        "flybackLines": 130,
+        "twoWayAlignment": 0,
+        "averageMode": 0,
+        "averageNum": 2,
+        "inputRange1": 10,
+        "inputRange2": 10,
+        "mag": 27.77,
+        "magName": "Olympus 25x",
+        "timepoints": 1600,
+        "frames": 1600,
+        "galvoGalvo": 1,
+        "galvoResonance": 1
+      },
+      "pmt": {
+        "enableA": 1,
+        "gainA": 50.0,
+        "enableB": 1,
+        "gainB": 50.0
+      },
+      "pockels_xml": {
+        "type": 1,
+        "start": 20.5,
+        "stop": 20.5,
+        "minV": 0.06,
+        "maxV": 1.55,
+        "blankPercentage": 0.0,
+        "rampPath": "C:\\Users\\User\\Documents\\ThorImageLS 4.1\\Application Settings\\powerramps\\30to40mw.txt"
+      },
+      "xml_path": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC050\\Experiment.xml",
+      "stacks": {
+        "ChanA": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC050\\DATA\\ChanA\\ChanA_stk.tif",
+        "ChanB": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC050\\DATA\\ChanB\\ChanB_stk.tif"
+      }
+    },
+    {
+      "label": "PC150",
+      "name": "PC150",
+      "date_utc": "2026-02-14T17:38:57+00:00",
+      "computer": "THORLABS_30_016",
+      "scope": "Shinano",
+      "status": "started",
+      "aborted": true,
+      "config_key": "THORLABS_30_016|512x512|fr29.595|fs178.0|px0.935|scanMode0|avg0x2",
+      "pockels_setting": 150,
+      "scan": {
+        "scanMode": 0,
+        "areaMode": 0,
+        "pixelX": 512,
+        "pixelY": 512,
+        "fieldSize": 178.0,
+        "pixelSizeUM": 0.935,
+        "frameRate": 29.595,
+        "dwellTime": 0.08,
+        "flybackCycles": 12,
+        "flybackLines": 130,
+        "twoWayAlignment": 0,
+        "averageMode": 0,
+        "averageNum": 2,
+        "inputRange1": 10,
+        "inputRange2": 10,
+        "mag": 27.77,
+        "magName": "Olympus 25x",
+        "timepoints": 5000,
+        "frames": 5000,
+        "galvoGalvo": 1,
+        "galvoResonance": 1
+      },
+      "pmt": {
+        "enableA": 1,
+        "gainA": 50.0,
+        "enableB": 1,
+        "gainB": 50.0
+      },
+      "pockels_xml": {
+        "type": 1,
+        "start": 20.5,
+        "stop": 20.5,
+        "minV": 0.06,
+        "maxV": 1.55,
+        "blankPercentage": 0.0,
+        "rampPath": "C:\\Users\\User\\Documents\\ThorImageLS 4.1\\Application Settings\\powerramps\\30to40mw.txt"
+      },
+      "xml_path": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC150\\Experiment.xml",
+      "stacks": {}
+    },
+    {
+      "label": "PC150_001",
+      "name": "PC150_001",
+      "date_utc": "2026-02-14T17:44:20+00:00",
+      "computer": "THORLABS_30_016",
+      "scope": "Shinano",
+      "status": "Complete",
+      "aborted": false,
+      "config_key": "THORLABS_30_016|512x512|fr29.595|fs178.0|px0.935|scanMode0|avg0x2",
+      "pockels_setting": 150,
+      "scan": {
+        "scanMode": 0,
+        "areaMode": 0,
+        "pixelX": 512,
+        "pixelY": 512,
+        "fieldSize": 178.0,
+        "pixelSizeUM": 0.935,
+        "frameRate": 29.595,
+        "dwellTime": 0.08,
+        "flybackCycles": 4,
+        "flybackLines": 130,
+        "twoWayAlignment": 0,
+        "averageMode": 0,
+        "averageNum": 2,
+        "inputRange1": 10,
+        "inputRange2": 10,
+        "mag": 27.77,
+        "magName": "Olympus 25x",
+        "timepoints": 1600,
+        "frames": 1600,
+        "galvoGalvo": 1,
+        "galvoResonance": 1
+      },
+      "pmt": {
+        "enableA": 1,
+        "gainA": 50.0,
+        "enableB": 1,
+        "gainB": 50.0
+      },
+      "pockels_xml": {
+        "type": 1,
+        "start": 0.0,
+        "stop": 0.0,
+        "minV": 0.06,
+        "maxV": 1.55,
+        "blankPercentage": 0.0,
+        "rampPath": "C:\\Users\\User\\Documents\\ThorImageLS 4.1\\Application Settings\\powerramps\\30to40mw.txt"
+      },
+      "xml_path": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC150_001\\Experiment.xml",
+      "stacks": {
+        "ChanA": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC150_001\\DATA\\ChanA\\ChanA_stk.tif",
+        "ChanB": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC150_001\\DATA\\ChanB\\ChanB_stk.tif"
+      }
+    },
+    {
+      "label": "PC250",
+      "name": "PC250",
+      "date_utc": "2026-02-14T17:46:10+00:00",
+      "computer": "THORLABS_30_016",
+      "scope": "Shinano",
+      "status": "Complete",
+      "aborted": false,
+      "config_key": "THORLABS_30_016|512x512|fr29.595|fs178.0|px0.935|scanMode0|avg0x2",
+      "pockels_setting": 250,
+      "scan": {
+        "scanMode": 0,
+        "areaMode": 0,
+        "pixelX": 512,
+        "pixelY": 512,
+        "fieldSize": 178.0,
+        "pixelSizeUM": 0.935,
+        "frameRate": 29.595,
+        "dwellTime": 0.08,
+        "flybackCycles": 12,
+        "flybackLines": 130,
+        "twoWayAlignment": 0,
+        "averageMode": 0,
+        "averageNum": 2,
+        "inputRange1": 10,
+        "inputRange2": 10,
+        "mag": 27.77,
+        "magName": "Olympus 25x",
+        "timepoints": 1600,
+        "frames": 1600,
+        "galvoGalvo": 1,
+        "galvoResonance": 1
+      },
+      "pmt": {
+        "enableA": 1,
+        "gainA": 50.0,
+        "enableB": 1,
+        "gainB": 50.0
+      },
+      "pockels_xml": {
+        "type": 1,
+        "start": 20.5,
+        "stop": 20.5,
+        "minV": 0.06,
+        "maxV": 1.55,
+        "blankPercentage": 0.0,
+        "rampPath": "C:\\Users\\User\\Documents\\ThorImageLS 4.1\\Application Settings\\powerramps\\30to40mw.txt"
+      },
+      "xml_path": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC250\\Experiment.xml",
+      "stacks": {
+        "ChanA": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC250\\DATA\\ChanA\\ChanA_stk.tif",
+        "ChanB": "F:\\bPACNewData2026\\DataTrials260216_CavscAMP_PNAS\\DarkCurrent\\260214\\PC250\\DATA\\ChanB\\ChanB_stk.tif"
+      }
+    }
+  ]
+}

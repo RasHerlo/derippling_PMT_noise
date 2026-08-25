@@ -222,3 +222,9 @@ examples/
 
 # Empty / unused local dirs
 vendor/
+
+# Batch defringe cache if someone points --root at the repo itself
+.defringe_cache/
+
+# Dark-current figure output if someone points --root at the repo itself
+.darkcurrent_analysis/

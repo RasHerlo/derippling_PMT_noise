@@ -1,42 +1,43 @@
 # Handoff: SUPPORT agent
 
 You are optimizing **SUPPORT denoising** in https://github.com/RasHerlo/SUPPORT  
-Shared sandbox (do not invent a second data tree):
+Shared sandbox:
 
 `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`
 
 ## Hard constraints
 
-- Do **not** touch `mc_runs/` (suite2p in progress).
-- Do **not** rename/overwrite `inputs/raw`, `inputs/defringed`, or `inputs/support`.
-- Write new outputs under `support_runs/<tag>/` only.
+- Do **not** touch `mc_runs/`  
+- Do **not** rename/overwrite `inputs/raw`, `inputs/defringed`, `inputs/defringed_v21`, `inputs/support`  
+- Write under `support_runs/<tag>/` only  
 
-## Defringe context (read-only)
+## Defringe context (2026-08-19)
 
-- Current defringe winner: **`pack_B`** (v2.1 defaults)
-- **Full stacks for suite2p / combo (preferred):**
-  - `inputs/defringed_v21/ChanA/ChanA_stk_defringed_v21.tif`
-  - `inputs/defringed_v21/ChanB/ChanB_stk_defringed_v21.tif`
-  - (seeded from 500fr families: ChanA q=14, ChanB q=60)
-- 500fr winner + avgs: `defringe_runs/v21_sweep_500fr/accepted/pack_B/`
-- Status / pros-cons: repo `notes/OPTIMIZATION_STATUS.md`
-- **Do not use** `inputs/defringed` (legacy v2; ChanA wrong q≈6)
+| Tag | Path | Notes |
+|---|---|---|
+| **v2.2 pack_D (preferred for retrain)** | `inputs/defringed_v22/` | ChanA strong25 residual ~6.9% on 500fr (was ~9.3% pack_B); gate0=0 |
+| v2.1 pack_B | `inputs/defringed_v21/` | Previous full-stack SOTA; keep for A/B |
+| legacy v2 | `inputs/defringed/` | **Do not use** — superseded; ChanA was cleaned on a different `q` (see caveat below) |
 
-## Requested task (inference compare first)
+500fr winner stacks: `defringe_runs/v22_sweep_500fr/accepted/pack_D/`  
+Sweep summary: `defringe_runs/v22_sweep_500fr/SUMMARY.md`  
+Status: `notes/OPTIMIZATION_STATUS.md`
 
-1. Run SUPPORT **inference** (existing pretrained / `model_10` OK) on:
-   - raw: `inputs/raw/...` or `inputs/slices_500fr/raw/` for a fast path
-   - defringed: prefer `inputs/defringed_v21/` (full) or `defringe_runs/v21_sweep_500fr/accepted/pack_B/` (500fr)
-2. Save under e.g. `support_runs/packB_vs_raw/`.
-3. Deliver:
-   - same-frame montages: raw | defringed | SUPPORT(raw) | SUPPORT(defringed)
-   - brief note on residual fringe visibility / blocky artifacts
-   - any quantitative block/seam or similar metrics you already use
-4. **Retrain** on `defringed_v21` when ready; models trained on fringed data may treat fringe as signal.
+Caveat (2026-08-25): legacy v2 ChanA used `q≈6` and was long described as the
+"wrong q". Dark-current controls now show `q≈6` is real structure, so that label
+was an untested inference — see `notes/DARKCURRENT.md` §3.1b. The
+recommendation is unchanged (v2.2 pack_D scores better), but do not repeat
+"wrong q" as established fact.
 
-## Return for the overview repo
+**Do not** recycle SUPPORT outputs into another defringe pass.
 
-Keep a status file **inside the SUPPORT repo** (or under sandbox `support_runs/<tag>/STATUS.md`).  
-The overview repo https://github.com/RasHerlo/figure_for_cAMP_Neu_paper will collect it — do not edit that overview repo from the SUPPORT agent unless the user asks there.
+## Requested next work
 
-Include: approach tried, pros/cons vs SUPPORT-on-raw, artifact paths under `support_runs/`.
+1. **Retrain** ChanA (required) and ChanB (recommended) on **`inputs/defringed_v22`** once full-stack STATUS shows completed (fallback: `defringed_v21` if v22 still running).  
+2. Inference bakeoff: SUPPORT(`model_10` on v22) vs new checkpoint on v22 — ridge amp + box/tile visuals.  
+3. Optional quick 500fr compare: pack_B vs pack_D as SUPPORT inputs before full retrain finishes.  
+4. Keep status in SUPPORT `notes/` for overview repo collection.
+
+## Return for overview
+
+Approach tried, pros/cons, artifact paths under `support_runs/`.
