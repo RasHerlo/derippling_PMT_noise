@@ -185,6 +185,8 @@ def run_batch(
                 f"    {tag}: {result.message}"
                 + (f" ({'; '.join(extra)})" if extra else "")
             )
+            if result.status == "ok" and result.out_dir is not None:
+                print(f"    readout: {result.out_dir}")
 
             logfh.write(
                 json.dumps(
@@ -197,6 +199,11 @@ def run_batch(
                         "message": result.message,
                         "tif": str(job.tif_path),
                         "out": str(result.out_tif) if result.out_tif else None,
+                        "out_dir": str(result.out_dir) if result.out_dir else None,
+                        "removed": str(result.removed_tif) if result.removed_tif else None,
+                        "overview_pdf": str(result.overview_pdf)
+                        if result.overview_pdf
+                        else None,
                         "used_prior": result.used_prior,
                         "reseeded": result.reseeded,
                         "families_q": result.families_q,
@@ -239,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--no-skip-existing",
         action="store_true",
-        help="Re-defringe even if *_defringed_v22.tif already exists",
+        help="Re-defringe even if defringe_v22/*_defringed_v22.tif already exists",
     )
     ap.add_argument(
         "--no-diagnostics",

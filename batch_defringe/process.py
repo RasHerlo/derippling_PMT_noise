@@ -20,6 +20,12 @@ from pmt_fringe_raw_adaptive_v22 import clean_frame_v22  # noqa: E402
 
 from .experiment_xml import fingerprint_compatible
 from .priors import load_prior, save_prior
+from .readout import (
+    cleaned_path_for,
+    removed_path_for,
+    tracking_row,
+    write_readout,
+)
 from .seed import (
     detect_fringe_rich,
     hydrate_families,
@@ -50,13 +56,16 @@ class ProcessResult:
     status: str  # ok | skipped | needs_review | error
     message: str
     out_tif: Path | None = None
+    out_dir: Path | None = None
+    removed_tif: Path | None = None
+    overview_pdf: Path | None = None
     used_prior: bool = False
     reseeded: bool = False
     families_q: list[float] | None = None
 
 
 def default_output_path(tif_path: Path) -> Path:
-    return tif_path.with_name(tif_path.stem + "_defringed_v22.tif")
+    return cleaned_path_for(tif_path)
 
 
 def process_stack(
@@ -74,12 +83,16 @@ def process_stack(
 ) -> ProcessResult:
     tif_path = Path(tif_path)
     out_tif = Path(out_tif) if out_tif else default_output_path(tif_path)
+    out_dir = out_tif.parent
+    removed_tif = removed_path_for(tif_path, out_dir)
 
     if skip_existing and out_tif.is_file():
         return ProcessResult(
             status="skipped",
-            message=f"exists: {out_tif.name}",
+            message=f"exists: {out_dir.name}/{out_tif.name}",
             out_tif=out_tif,
+            out_dir=out_dir,
+            removed_tif=removed_tif if removed_tif.is_file() else None,
         )
 
     prior = None if force_fresh_seed else load_prior(batch_root, computer, channel)
@@ -175,9 +188,11 @@ def process_stack(
                     indent=2,
                 )
 
-        out_tif.parent.mkdir(parents=True, exist_ok=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
         est_bytes = n * h * w * np.dtype(dtype).itemsize
+        rem_bytes = n * h * w * np.dtype(np.float32).itemsize
         bigtiff = est_bytes > 3_500_000_000
+        bigtiff_rem = rem_bytes > 3_500_000_000
 
         csvfh = None
         writer = None
@@ -196,7 +211,15 @@ def process_stack(
             writer = csv.DictWriter(csvfh, fieldnames=fields)
             writer.writeheader()
 
-        with tifffile.TiffWriter(out_tif, bigtiff=bigtiff) as tw:
+        rows: list[dict] = []
+        acc_raw = np.zeros((h, w), dtype=np.float64)
+        acc_clean = np.zeros((h, w), dtype=np.float64)
+        acc_removed = np.zeros((h, w), dtype=np.float64)
+
+        with (
+            tifffile.TiffWriter(out_tif, bigtiff=bigtiff) as tw,
+            tifffile.TiffWriter(removed_tif, bigtiff=bigtiff_rem) as tw_rem,
+        ):
             for fi in range(n):
                 frame = tf.pages[fi].asarray()
                 preds = [traj[fi] for traj in trajectories]
@@ -204,26 +227,59 @@ def process_stack(
                     frame, families, preds, **PACK_D
                 )
                 tw.write(cleaned, contiguous=True)
+                tw_rem.write(removed.astype(np.float32, copy=False), contiguous=True)
+                acc_raw += np.asarray(frame, dtype=np.float64)
+                acc_clean += np.asarray(cleaned, dtype=np.float64)
+                acc_removed += np.asarray(removed, dtype=np.float64)
+                row = tracking_row(fi, removed, tracking)
+                rows.append(row)
                 if writer is not None:
-                    row = {
-                        "frame": fi,
-                        "removed_rms": float(
-                            np.sqrt(np.mean(removed.astype(float) ** 2))
-                        ),
-                    }
-                    for i, t in enumerate(tracking):
-                        row[f"family{i}_q"] = t["q"]
-                        row[f"family{i}_strength"] = t["strength"]
-                        row[f"family{i}_gate"] = t["gate"]
-                        row[f"family{i}_eff_max_alpha"] = t["eff_max_alpha"]
-                        row[f"family{i}_residual_pass"] = t["residual_pass"]
-                        row[f"family{i}_residual_strength"] = t["residual_strength"]
-                    writer.writerow(row)
+                    writer.writerow(
+                        {
+                            "frame": row["frame"],
+                            "removed_rms": row["removed_rms"],
+                            **{
+                                k: row[k]
+                                for i in range(len(families))
+                                for k in (
+                                    f"family{i}_q",
+                                    f"family{i}_strength",
+                                    f"family{i}_gate",
+                                    f"family{i}_eff_max_alpha",
+                                    f"family{i}_residual_pass",
+                                    f"family{i}_residual_strength",
+                                )
+                            },
+                        }
+                    )
                 if (fi + 1) % 200 == 0 or fi == n - 1:
                     print(f"      frames {fi + 1}/{n}", flush=True)
 
         if csvfh is not None:
             csvfh.close()
+
+        inv_n = 1.0 / max(n, 1)
+        readout_paths = write_readout(
+            out_dir,
+            tif_path=tif_path,
+            families=families,
+            params=PACK_D,
+            seed_info=seed_info,
+            medspec=medspec,
+            n_frames=n,
+            frame_hw=(h, w),
+            source_shape=shape,
+            mean_raw=acc_raw * inv_n,
+            mean_cleaned=acc_clean * inv_n,
+            mean_removed=acc_removed * inv_n,
+            rows=rows,
+            computer=computer,
+            channel=channel,
+            fingerprint=fingerprint,
+            qc=qc_msg,
+            used_prior=had_usable_prior and not reseeded,
+            reseeded=reseeded,
+        )
 
     if update_prior_on_success and not force_fresh_seed:
         save_prior(
@@ -236,10 +292,14 @@ def process_stack(
             notes=qc_msg,
         )
 
+    pdf = readout_paths.get("overview_pdf") if readout_paths else None
     return ProcessResult(
         status="ok",
         message=qc_msg,
         out_tif=out_tif,
+        out_dir=out_dir,
+        removed_tif=removed_tif,
+        overview_pdf=pdf if isinstance(pdf, Path) else None,
         used_prior=had_usable_prior and not reseeded,
         reseeded=reseeded,
         families_q=[float(f["q"]) for f in families],
