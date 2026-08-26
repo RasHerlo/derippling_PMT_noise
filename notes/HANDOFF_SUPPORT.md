@@ -23,11 +23,13 @@ Shared sandbox:
 Sweep summary: `defringe_runs/v22_sweep_500fr/SUMMARY.md`  
 Status: `notes/OPTIMIZATION_STATUS.md`
 
-Caveat (2026-08-25): legacy v2 ChanA used `q≈6` and was long described as the
-"wrong q". Dark-current controls now show `q≈6` is real structure, so that label
-was an untested inference — see `notes/DARKCURRENT.md` §3.1b. The
-recommendation is unchanged (v2.2 pack_D scores better), but do not repeat
-"wrong q" as established fact.
+Caveat (updated 2026-08-26): legacy v2 ChanA used `q≈6` and was long described as
+the "wrong q". Dark-current controls have now **independently confirmed** that
+`q≈6` is real, time-varying fringe structure, measured without borrowing any
+background from DC-adjacent rows — see `notes/DARKCURRENT.md` §3.1c. The "wrong
+q" label was an untested inference and is retired; do not repeat it. The
+recommendation is unchanged (v2.2 pack_D still scores better), and `q≈6` and
+`q≈14` may well be one comb rather than a true-versus-false pair.
 
 **Do not** recycle SUPPORT outputs into another defringe pass.
 

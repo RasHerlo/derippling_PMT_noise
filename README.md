@@ -37,15 +37,15 @@ python reference/gpt/pmt_fringe_raw_adaptive_v22.py ChanA_stk.tif ^
   --diagnostics ChanA_defringe/diagnostics
 ```
 
-### Batch over an experiment root — `batch_defringe` v0.2.0
+### Batch over an experiment root — `batch_defringe` v0.3.0
 
 Package: `batch_defringe/` (`python -m batch_defringe`).
 
 **Default run:** opens a folder dialog, then walks the chosen root for
 `DATA/**/ChanA_stk.tif` and `DATA/**/ChanB_stk.tif`, runs **v2.2 / pack_D**, and
-writes `Chan*_stk_defringed_v22.tif` next to each raw stack. Existing defringed
-files are skipped (and reported). Soft priors are keyed by microscope
-(`Experiment.xml` `<Computer>`) × channel.
+writes each channel into a `defringe_v22/` folder beside the raw stack. Existing
+cleaned stacks in that folder are skipped (and reported). Soft priors are keyed by
+microscope (`Experiment.xml` `<Computer>`) × channel.
 
 ```bash
 python -m batch_defringe
@@ -68,7 +68,19 @@ python -m batch_defringe --root "..." --dry-run
 If `Experiment.xml` is missing: console warning + `DEFRINGE_WARNING_NO_EXPERIMENT_XML.txt`
 beside the stack, and a **fresh seed** (no microscope prior).
 
-Outputs: `DATA/.../Chan*_stk_defringed_v22.tif` (raw left untouched).  
+Outputs (raw left untouched), under `DATA/.../ChanA/defringe_v22/` (same for ChanB):
+
+```text
+ChanA_stk_defringed_v22.tif   # cleaned stack
+ChanA_stk_removed_v22.tif     # raw − cleaned (float32 remainder)
+per_frame.csv                 # gate / q / RMS per frame
+families.json                 # FFT ridge mask definition + summary
+mask_fft.tif                  # 2-D FFT-domain support of seeded families
+mean_raw.tif / mean_cleaned.tif / mean_removed.tif
+overview.pdf                  # averages, mask, cleaning heaviness vs frame
+overview.png                  # same page as a preview
+```
+
 Priors + run logs: `{root}/.defringe_cache/`.
 
 #### Why it is designed this way
@@ -82,12 +94,13 @@ Priors + run logs: `{root}/.defringe_cache/`.
 | **Fringe-rich seed on long stacks** | Full-stack median detection can pick a weak/wrong ridge (seen on ChanA). First seed (and reseeds) prefer strong blocks, so dedicated 500fr seed files are not required. |
 | **Per-stack sanity checks** | Track-update fraction and `q` drift vs prior; failures go to `needs_review` in the run log rather than silently promoting bad cleans. |
 | **Root-local `.defringe_cache/`** | Priors travel with the dataset; other workstations reuse them after the same `pip install -r requirements.txt` setup. |
-| **Skip existing outputs** | Safe re-runs on large trees; already-defringed stacks are reported as skipped. |
+| **Skip existing outputs** | Safe re-runs on large trees; already-defringed stacks in `defringe_v22/` are reported as skipped. |
+| **Readout next to the clean** | Every successful clean writes the remainder stack, per-frame numbers, FFT mask, and a one-page PDF so later processing can track what was removed. |
 
 Sandbox helper that still uses an explicit 500fr seed: `run_full_v22_seeded500.py`.  
 Status for overview: `notes/OPTIMIZATION_STATUS.md`
 
-## Dark-current controls — `darkcurrent/` v0.1.0
+## Dark-current controls — `darkcurrent/` v0.2.0
 
 Calibration recordings (no sample) used to measure the fringe layer itself, so
 seeding can verify a known family instead of searching blindly. Kept separate
@@ -97,6 +110,7 @@ writes into experiment folders or the defringe prior cache.
 ```bash
 python -m darkcurrent census --root "...\DarkCurrent" --registry
 python -m darkcurrent characterize --root "...\DarkCurrent" --metrics
+python -m darkcurrent confirm --root "...\DarkCurrent"
 ```
 
 `census` reports acquisition settings per trial and groups them by scan
@@ -104,6 +118,25 @@ configuration. `characterize` measures ridge families, field-of-view dependence,
 and temporal drift, writing figures next to the data plus a small JSON history in
 the repo (`darkcurrent/registry.json`, `darkcurrent/measurements.json`) so
 repeated recordings can be tracked over time.
+
+`confirm` re-tests ridge candidates without borrowing any background from
+DC-adjacent rows, which is what a family close to DC needs before it can be
+trusted. It suppresses the DC skirt (high-pass along y plus Hann apodisation,
+with the filter gain calibrated against a synthetic tone), takes its `fx`
+background from within the same row, and picks the support on one half of the
+sampled frames while measuring it on the other. A separate temporal test tracks
+the complex FFT coefficient over consecutive frames, which separates a fringe
+that drifts from structure that is merely fixed — static structure and DC leakage
+both peak at zero temporal frequency. Thresholds are calibrated per channel
+against an empirical null over every row not under test, and the fraction of
+those empty rows that still pass is reported as the false-positive rate.
+Verdicts: `fringe_confirmed`, `static_structure`, `structure_uncharacterized`
+(real but temporal character unresolved), `moving_not_localized`, `noise_like`.
+
+`python -m darkcurrent.validate_confirm` is the battery's self-test: it plants
+known components in synthetic stacks and checks each one gets the verdict it
+should, including a static ridge sitting at the same near-DC frequency as a real
+family. Needs no data; run it after editing `darkcurrent/confirm.py`.
 
 Two acquisition conventions this tooling relies on:
 

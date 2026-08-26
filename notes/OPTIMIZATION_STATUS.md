@@ -7,7 +7,7 @@ This file + `optimization_manifest.json` are the handoff surface for that repo.
 **Repo:** https://github.com/RasHerlo/derippling_PMT_noise  
 **Sandbox data:** `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`  
 **Machine-readable twin:** [`optimization_manifest.json`](optimization_manifest.json)  
-**Last updated:** 2026-08-19
+**Last updated:** 2026-08-26
 
 ---
 
@@ -35,15 +35,18 @@ ratio_start=1.4  ratio_full=3.5
 - Narrow ridges (no full-row widen)  
 - ChanA strong25 residual **9.3% → 6.9%** vs pack_B; gate>0.5 **11.7% → 9.1%**  
 - ChanB also slightly better; injection E_recovery flat/slightly down  
-- Full stacks seeded from 500fr (ChanA then locks q≈14, not q≈6)
+- Full stacks seeded from 500fr (ChanA then locks q≈14 rather than q≈6; both are
+  now known to be real, so this is a choice of which family gets cleaned)
 
 ### Cons / risks
 - Softening `ratio_*` notches more moderate bins — watch biology on strong frames (injection OK on 500fr)  
 - Full-stack median detect still needs 500fr seed for ChanA  
-- **Open (2026-08-25):** the q≈6-vs-q≈14 choice on ChanA rests on an untested
-  inference, not a measurement. Dark-current controls show q≈6 is real structure
-  in the same `fx` band as q≈14 — see `notes/DARKCURRENT.md` §3.1b. Seeding from
-  a fringe-rich window is still sound; the "trap" framing is not.  
+- **Open (updated 2026-08-26):** the q≈6-vs-q≈14 choice on ChanA was never a
+  measurement. Dark-current controls have now independently confirmed q≈6 as
+  real, time-varying fringe structure in the same `fx` band as q≈14
+  (`notes/DARKCURRENT.md` §3.1c). Seeding from a fringe-rich window is still
+  sound; the "trap" framing is retired. Still open is whether the two are one
+  comb, which decides whether seeding on q≈14 alone leaves fringe behind.  
 - SUPPORT must still be **retrained**; do not recycle SUPPORT→defringe  
 
 ### Rejected / demoted
@@ -65,6 +68,9 @@ ratio_start=1.4  ratio_full=3.5
 | 2026-08-19 | SUPPORT model_10 on v21 | ChanA ridge amp 1.59×; boxes | SUPPORT `fullstack_v21_model10` |
 | 2026-08-19 | **v2.2 lever sweep → pack_D** | ChanA strong25 **6.9%**; promote | `v22_sweep_500fr` |
 | 2026-08-19 | Full-stack v2.2 seeded | → `inputs/defringed_v22/` | `v22_full_seeded500` |
+| 2026-08-25 | Dark-current controls (`darkcurrent/`) | First measured characterisation of the fringe layer on Shinano | `notes/DARKCURRENT.md` |
+| 2026-08-26 | `darkcurrent confirm` battery | ChanA q≈6 confirmed real and time-varying, 0 false positives | `notes/DARKCURRENT.md` §3.1c |
+| 2026-08-26 | Defringe readout (`batch_defringe` v0.3.0) | Every clean now writes remainder stack, per-frame numbers, mask, PDF | `defringe_v22/` beside each stack |
 
 ---
 

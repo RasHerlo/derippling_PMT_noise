@@ -20,9 +20,11 @@ inputs/defringed_v22/ChanB/ChanB_stk_defringed_v22.tif
 inputs/defringed_v21/ChanA|B/*_stk_defringed_v21.tif
 ```
 
-Use for A/B vs v2.2. **Do not** use `inputs/defringed` (legacy v2, superseded;
-its ChanA `q≈6` was long called wrong, but see `notes/DARKCURRENT.md` §3.1b —
-that label was never verified).
+Use for A/B vs v2.2. **Do not** use `inputs/defringed` (legacy v2, superseded on
+its scores). Its ChanA `q≈6` was long called wrong; that label is now retired —
+dark-current controls confirm `q≈6` is real, time-varying structure
+(`notes/DARKCURRENT.md` §3.1c). The demotion stands on the residual metrics
+alone.
 
 ## Constraints
 

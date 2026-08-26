@@ -92,10 +92,11 @@ make it safe to notch on real data — but "avoid `q≈6` because it is an artif
 is no longer a supportable justification, and the reject-band idea floated during
 the 2026-08-25 policy discussion should be dropped.
 
-Caveat: `q≈6` sits close to DC, which is the hardest place to measure. The row
-background for `q=6` includes rows adjacent to DC, and the control offset lands
-near DC too. The median-based background should be robust, but this specific
-number deserves an independent check before anything in the pipeline changes.
+Caveat, now resolved: `q≈6` sits close to DC, which is the hardest place to
+measure, and the row background for `q=6` reaches rows adjacent to DC. That
+caveat was well founded — it turned out to be worse than "adjacent" (§3.1c) — but
+the conclusion survives an independent re-measurement that never touches a
+DC-adjacent row. See §3.1c.
 
 ### 3.1b Why the pipeline warned about `q≈6` in the first place
 
@@ -136,6 +137,105 @@ This does **not** mean the 500 fr seeding decision was wrong in effect. Seeding
 from a fringe-rich window is still the right instinct, and the resulting cleans
 scored well. What was wrong was the *reason* recorded for it, and the categorical
 warnings built on top.
+
+### 3.1c Independent confirmation of the near-DC family
+
+**Date:** 2026-08-26
+**Code:** `darkcurrent/confirm.py` (`python -m darkcurrent confirm`)
+**Artifacts:** `<data root>\.darkcurrent_analysis\confirm_20260826T081515Z\confirm.json`
+
+This is §9 item 1, closed. The near-DC ChanA family is **real, narrow in `fx`, and
+time-varying**, measured without any DC-adjacent background.
+
+**First, the defect was worse than §3.1 assumed.** The legacy estimator's
+background for a candidate at `q` is offsets ±5-9 from row `cy±q`. For `q=6` that
+set is rows `cy-3 … cy+1` — it **contains the DC row itself**. The probe reports
+this per candidate, and every near-DC candidate in every trial came back
+`nearest_bg_dy = 0`, `uses_dc_row = True`. The contamination also reached the
+*support*: `ridge_z_at_row` builds its background from offsets ±4-10, so the
+`|fx|≈11-41` figure quoted in §3.1 was itself derived across DC. Neither number
+was independent.
+
+**What replaced it.** Four changes, each forced by a control that failed:
+
+1. Frames are high-passed along y and Hann-apodised before the FFT, killing the
+   offset and `q≲1` structure that feed the DC pedestal. Without this, the steep
+   pedestal's *curvature* alone produced a "ridge" at `q≈6` with `z≈160`.
+2. The background along `fx` is a wide median filter **within the same row**, so
+   no other row is consulted at all.
+3. Support is chosen on one half of the sampled frames and measured on the other.
+   Without the split, a pure-noise row scored 3-15× the noise floor instead of the
+   0.4 it should, because every row got credit for its own best-looking bins.
+4. The filter's gain at each `q` is calibrated with a synthetic sinusoid of known
+   amplitude, so a near-DC candidate is not penalised for sitting near the
+   high-pass corner (measured gain 0.22-0.30, against 0.25 for an unattenuated
+   tone).
+
+Thresholds are calibrated per channel against an empirical null over all ~194
+rows not under test, with robust rejection of the rows that carry structure. The
+false-positive rate on 24 verified-empty rows was **0/24 in all six channels**.
+
+| Trial / channel | `q` | Period px | Amp SNR | (thresh) | Prominence | (thresh) | Temporal peak | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| PC050 / ChanA | 5 | 102.4 | 165 | 8.1 | 178 | 10.8 | +0.045 c/fr (+1.33 Hz) | **confirmed** |
+| PC050 / ChanA | 8 | 64.0 | 82 | 8.1 | 80 | 10.8 | −0.014 (−0.40 Hz) | **confirmed** |
+| PC250 / ChanA | 6 | 85.3 | 153 | 5.4 | 20 | 9.8 | +0.129 (+3.81 Hz) | **confirmed** |
+| PC250 / ChanA | 9 | 56.9 | 110 | 5.4 | 52 | 9.8 | −0.020 (−0.58 Hz) | **confirmed** |
+| PC150_001 / ChanA | 3 | 170.7 | 132 | 30.8 | 6351 | 12.7 | −0.389 (−11.50 Hz) | **confirmed** |
+| PC050 / ChanB | 3 | 170.7 | 6.9 | 11.9 | 6.9 | 11.9 | — | noise-like |
+| PC150_001 / ChanB | 7 | 73.1 | 12.9 | 51.5 | 27.1 | 12.9 | +0.166 | moving, not localised |
+
+The near-DC candidates are the **strongest** structures in ChanA, at 20-30× their
+own channel's threshold. Two of them are confirmed per trial, spaced by 3
+(`5 & 8`, `6 & 9`) — worth remembering as a possible sideband pair rather than two
+independent families.
+
+**The decisive part is the temporal test**, because it needs no spatial
+background model. The complex FFT coefficient at each support bin is tracked over
+512 consecutive frames and its two-sided temporal power spectrum averaged over
+bins. Static structure — including anything that is really DC leakage — peaks at
+`f=0`, because it inherits DC's behaviour. A drifting fringe peaks elsewhere.
+Every confirmed candidate peaks at a **non-zero** frequency, while the `fy=0`
+reference row peaks at exactly `f=0` in three of six channels. So the near-DC
+ChanA structure is not static shading and is not DC leakage: it moves.
+
+The method was validated on synthetic stacks with known contents before being
+trusted here (`python -m darkcurrent.validate_confirm`, three scenarios, all
+passing). Each stack carries a steep static shading pedestal, so the battery has
+to survive a DC skirt it did not build. The case that matters most is the second
+scenario: a ridge planted at `q=6` that does *not* move is reported as static
+structure rather than as a fringe, while the same `q=6` planted with drift — and
+again with 0.8 rad of per-frame phase jitter, which is the regime §3.3 measured
+on real data — is confirmed. So the test discriminates the exact confound §3.1b
+worried about, and does so without needing a clean phase. Across the three
+scenarios: every planted component got its expected verdict and 0/24 null rows
+passed.
+
+**What this does not establish.** The battery is deliberately conservative, and
+several known-real families fail it:
+
+- ChanB `q=54` (PC250) confirms cleanly, but `q=95` (PC050) lands in
+  `structure_uncharacterized` — solid spatial evidence, temporal peak not
+  resolvable. That outcome exists on purpose: §3.3 measured a phase that wanders
+  1.1-1.8 rad per frame, which spreads temporal power, so demanding a sharp
+  temporal peak would reject real families. Absence of a temporal peak is not
+  evidence against a family here.
+- `PC150_001` ChanB rejects both its near-DC candidate and its own strongest
+  family (`q=98`, `row_z=53.6`) on amplitude, because in that channel the *median*
+  empty row already scores 12.4 and 14 rows carry ridge-like structure. Nothing
+  stands out there against its own background. This is the anomalous near-dark
+  trial flagged in §3.4 and is a finding, not a bug.
+- Weak far-from-DC families (`q=24`, `27`, `38`, all `row_z<4.5`) do not clear
+  their channel thresholds.
+
+**One loose thread worth a cheap check.** In `PC150_001` ChanA both the `q=3` row
+and the `fy=0` reference peak at ∓0.3887 cycles/frame (∓11.50 Hz) with enormous
+prominence — same frequency, opposite sign, so a global oscillation of the whole
+frame rather than a spatial family. At 29.595 Hz frame rate that aliases to
+`11.50 + 3×29.595 = 100.3 Hz`, suspiciously close to twice mains. It is 0.3 Hz
+off, which exceeds the 0.06 Hz frequency resolution, so this is a hypothesis and
+not a measurement: it would require the true frame rate to be ~29.50 rather than
+the nominal 29.595. Testable against a recording with a known mains environment.
 
 ### 3.2 The fringe is strongly edge-weighted along x — the most actionable result
 
@@ -316,11 +416,28 @@ series the registry is built for.
 python -m darkcurrent census --root "F:\bPACNewData2026\DataTrials260216_CavscAMP_PNAS\DarkCurrent" --registry
 python -m darkcurrent characterize --root "F:\bPACNewData2026\DataTrials260216_CavscAMP_PNAS\DarkCurrent" \
   --sample-n 128 --tiles 4 --temporal-every 8 --phase-count 300 --metrics
+python -m darkcurrent confirm --root "F:\bPACNewData2026\DataTrials260216_CavscAMP_PNAS\DarkCurrent"
 ```
 
 Per-channel figures are written as `<trial>_<channel>_summary.png`: FOV tile
 excess, tile SNR, excess versus x, per-tile dominant `q`, excess over time,
 consecutive-frame phase, tracked `q` per block, and candidate evidence.
+
+`confirm` writes `confirm.json` only (no figures) and takes ~1 min for six
+channels. It re-tests candidates without DC-adjacent backgrounds (§3.1c) and
+reports, per channel, the empirical null and its false-positive rate. Use
+`--q 6,14` to force specific rows, `--only`/`--channel` to restrict, and
+`--temporal-frames` to trade run time against temporal frequency resolution.
+
+The battery's own self-test needs no data and takes ~30 s:
+
+```bash
+python -m darkcurrent.validate_confirm
+```
+
+It plants known components in synthetic stacks and fails loudly if any verdict
+changes (§3.1c). Run it after touching `darkcurrent/confirm.py` — the thresholds
+in there are easy to move by accident, and this is what catches it.
 
 ---
 
@@ -329,9 +446,13 @@ consecutive-frame phase, tracked `q` per block, and candidate evidence.
 Nothing in `batch_defringe` has been changed on the basis of this report. The
 findings that would feed a seed-policy change:
 
-- `q≈6` on ChanA is real structure, so it should not be reject-banded on the
-  assumption that it is an artifact. The historical "spurious / trap" language
-  was an untested inference (§3.1b) and should be retired from the notes.
+- `q≈6` on ChanA is real structure, **independently confirmed** without
+  DC-adjacent backgrounds and shown to be time-varying rather than static
+  shading (§3.1c), so it should not be reject-banded on the assumption that it is
+  an artifact. The historical "spurious / trap" language was an untested
+  inference (§3.1b); it has now been retired from `HANDOFF_SUPPORT.md`,
+  `HANDOFF_SUITE2P.md`, `OPTIMIZATION_STATUS.md` and `PROGRESS.md`, each of which
+  points here instead.
 - Mask location is predictable on ChanB (slow stepwise `q` drift), which supports
   verifying a known family rather than searching — but only where a control
   exists for that configuration. ChanA is not yet established.
@@ -343,8 +464,8 @@ findings that would feed a seed-policy change:
 
 ## 9. State pinned for the next session
 
-**Where this stands.** The `darkcurrent/` package is complete and working for
-census plus characterisation. One dataset has been analysed end to end. No
+**Where this stands.** The `darkcurrent/` package does census, characterisation
+and independent confirmation. One dataset has been analysed end to end. No
 production code has been touched: `batch_defringe` behaves exactly as before, and
 nothing writes into experiment folders or the defringe prior cache.
 
@@ -357,6 +478,12 @@ nothing writes into experiment folders or the defringe prior cache.
 - `PC150` (5000 frames, no `DATA/`) is aborted and excluded everywhere.
 - The `q≈6` warning originated as a relative "weaker than q=14 on one window"
   judgement, not a measurement of biology contamination (§3.1b).
+- **The near-DC ChanA family is real and moves** (§3.1c). Confirmed with in-row
+  backgrounds, split-half support selection, per-channel calibrated thresholds
+  and 0/24 false positives; a static ridge planted at the same `q` in synthetic
+  validation is correctly rejected. Do not re-open "is `q≈6` an artifact".
+- Every family also appears at its Nyquist partner `cy − q` (§3.5). Treat
+  `{q, cy−q}` as one family; a "control" at `q=250` *is* the `q=6` candidate.
 
 **Best current interpretation, not yet confirmed.** `q≈6` and `q≈14` on ChanA are
 both real and share the same `fx` band, so they are likely one phenomenon or one
@@ -364,17 +491,30 @@ comb rather than a true-versus-false pair.
 
 **Next steps, in order.**
 
-1. Independently confirm the near-DC `q≈5–7` measurement with a method that does
-   not borrow row background from DC-adjacent rows (§5).
+1. ~~Independently confirm the near-DC `q≈5–7` measurement.~~ **Done, §3.1c.**
 2. Re-run ChanA `q` tracking with a wider search window and a stability
    criterion, so §3.3 can say something about ChanA (currently window-saturated).
+   `confirm` now gives a per-channel amplitude null that the tracker could use as
+   its stability criterion instead of a fixed threshold.
 3. Put a floor on the control estimate in the SNR ranking, or require `row_z`
-   corroboration, before SNR is allowed to pick `q` (§5).
+   corroboration, before SNR is allowed to pick `q` (§5). Partly addressed:
+   `confirm` normalises by a robust noise scale that cannot be zero, after the
+   old ratio produced SNR values of order 10¹⁶ on quiet rows. `characterize`
+   still uses the old estimator.
 4. Test whether `q≈6` and `q≈14` co-occur on the sandbox ChanA stack — that is
-   the direct check on §3.1b, and it needs no new recordings.
+   the direct check on §3.1b, and it needs no new recordings. `confirm --q 6,14`
+   does exactly this run.
 5. Only then revisit seed policy in `batch_defringe`. The `needs_review` outcome
    on Haj Grant ChanA is still correct behaviour: no control exists at that
    configuration (§4), so there is nothing to verify a family against.
+
+**Two cautions for whoever picks this up.**
+
+- `row_z` (95th percentile across `fx`) is blind to narrow ridges: a 6-bin
+  segment out of ~480 valid bins does not move it. It is fine for finding the
+  broad families but must not be used to decide that a row is *empty*.
+- Selecting an `fx` support and measuring its excess on the same spectrum
+  inflates everything, including any null built that way. Split the frames.
 
 **New recordings would unblock:** items in §6, most importantly a control at the
 Haj Grant configuration.
@@ -383,9 +523,20 @@ Haj Grant configuration.
 `darkcurrent/measurements.json` (run history, appended per run), and figures
 under `<root>/.darkcurrent_analysis/<run>/`.
 
-**Which run to trust.** Only `20260825T160621Z` — the one recorded in
+**Which run to trust.**
+
+For `characterize`: only `20260825T160621Z` — the one recorded in
 `darkcurrent/measurements.json`. Four earlier directories from the same afternoon
 (`20260825T1554…` through `20260825T1604…`) are development runs made *before*
 the amplitude metric was fixed; they report masked-field RMS instead of spectral
 excess and their FOV and temporal numbers are not comparable. They were left on
 disk rather than deleted; ignore them, or clear them by hand.
+
+For `confirm`: only `confirm_20260826T081515Z`. The earlier `confirm_smoke` and
+`confirm_20260826T0752…` through `…T0812…` directories are development runs from
+the same morning, each superseded because a control caught a flaw in the method —
+in order: the row-permutation null inflated the `fy` axis and put a real family
+*below* its own null; the positive control was drawn from a candidate's Nyquist
+partner; and support was selected and measured on the same spectrum. Their
+verdicts are wrong and their thresholds are not comparable. Same disposition:
+ignore, or clear by hand.

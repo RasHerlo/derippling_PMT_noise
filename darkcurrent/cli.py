@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .characterize import analyze_channel
+from .confirm import confirm_channel
 from .figures import plot_channel, plot_condition_compare
 from .metadata import discover_dark_recordings, recording_to_json
 
@@ -231,6 +232,177 @@ def cmd_characterize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_confirm(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    recs = [r for r in discover_dark_recordings(root) if r.stacks]
+    if not recs:
+        print(f"No dark recordings with assembled DATA stacks under {root}")
+        return 1
+
+    if args.only:
+        wanted = {s.strip() for s in args.only.split(",")}
+        recs = [r for r in recs if r.label in wanted]
+        if not recs:
+            print(f"No recordings matched --only {args.only}")
+            return 1
+
+    channels = None
+    if args.channel:
+        channels = {s.strip() for s in args.channel.split(",")}
+
+    forced = [float(s) for s in args.q.split(",")] if args.q else None
+
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    out_dir = Path(args.out) if args.out else root / ".darkcurrent_analysis" / f"confirm_{run_id}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nArtifacts: {out_dir}")
+    print(
+        f"Settings: sample_n={args.sample_n} dc_guard={args.dc_guard} "
+        f"fx_medfilt={args.fx_medfilt} hp_kernel={args.hp_kernel} "
+        f"temporal_frames={args.temporal_frames}"
+    )
+    print(
+        "Tests: background-policy probe | skirt-suppressed amplitude (gain "
+        "corrected, in-row fx background) | temporal character"
+    )
+
+    results = []
+    for rec in recs:
+        for channel, tif in sorted(rec.stacks.items()):
+            if channels and channel not in channels:
+                continue
+            print(f"\n[{rec.label} / {channel}] {tif.name}", flush=True)
+            payload = confirm_channel(
+                tif,
+                rec.label,
+                channel,
+                sample_n=args.sample_n,
+                temporal_frames=args.temporal_frames,
+                dc_guard=args.dc_guard,
+                medfilt=args.fx_medfilt,
+                hp_kernel=args.hp_kernel,
+                frame_rate=rec.scan.get("frameRate"),
+                forced_qs=forced,
+            )
+            payload["config_key"] = rec.config_key
+            payload["scope"] = rec.scope
+            payload["pockels_setting"] = rec.pockels_setting
+            payload["gain"] = rec.pmt.get(f"gain{channel[-1]}")
+            results.append(payload)
+
+            pk = payload["picked"]
+            peaks = ", ".join(
+                f"q={p['q']}(z={p['row_z']:.1f})" for p in pk["row_z_peaks"][:5]
+            )
+            print(f"    row-z peaks: {peaks}")
+            ns = payload.get("null_summary") or {}
+            an = ns.get("amplitude") or {}
+            print(
+                f"    positive control q={pk.get('positive_control')} | "
+                f"residual noise scale="
+                f"{payload['settings']['residual_noise_scale']:.2f}"
+            )
+            if an.get("n_rows"):
+                print(
+                    f"    amplitude null over {an['n_rows']} rows: "
+                    f"SNR med={an['snr_median']:.2f} sigma={an['snr_sigma']:.2f} "
+                    f"core_max={an['snr_core_max']:.2f} -> threshold "
+                    f"{ns.get('amplitude_threshold', 0):.2f}; "
+                    f"{an['n_structured_rows']} rows carry structure "
+                    f"(q={an['structured_q']})"
+                )
+            if ns.get("n_rows"):
+                print(
+                    f"    temporal null over {ns['n_rows']} empty rows: "
+                    f"prominence med={ns['prominence_median']:.1f} "
+                    f"core_max={ns.get('prominence_core_max', 0):.1f} "
+                    f"max={ns['prominence_max']:.1f} "
+                    f"({ns.get('prominence_outliers', 0)} outliers) -> threshold "
+                    f"{ns.get('prominence_threshold', 0):.1f}"
+                )
+                print(
+                    f"    false positives: {ns['n_false_positive']}/{ns['n_rows']} "
+                    f"({100 * ns['false_positive_rate']:.0f}%)"
+                    + (f" at q={ns['false_positive_q']}" if ns["n_false_positive"] else "")
+                )
+            for c in payload["candidates"]:
+                amp = c["amplitude"]
+                sup = amp.get("support") or {}
+                tmp = c["temporal"]
+                print(
+                    f"    q={c['q']:.0f} [{c['role']}] period={c['period_px']:.1f}px "
+                    f"-> {c['verdict'].upper()}"
+                )
+                bp = c.get("background_probe") or {}
+                if bp:
+                    lg, ds = bp["legacy"], bp["dc_safe"]
+                    print(
+                        f"      bg policy: legacy nearest_dy={lg['nearest_bg_dy']} "
+                        f"uses_DC_row={lg['uses_dc_row']} | "
+                        f"dc_safe nearest_dy={ds['nearest_bg_dy']}"
+                    )
+                if "excess" in amp:
+                    corr = amp.get("excess_gain_corrected")
+                    corr_txt = "n/a" if corr is None else f"{corr:.1f}"
+                    print(
+                        f"      amplitude: excess={amp['excess']:.1f} "
+                        f"ctrl_row={amp['control_row_excess']:.1f} "
+                        f"SNR={amp['snr']:.2f} "
+                        f"gain={amp['filter_gain']:.3f} corrected={corr_txt}"
+                    )
+                    print(
+                        f"      support: z_max={sup.get('z_max', 0.0):.2f} "
+                        f"{sup.get('support_bins')} bins "
+                        f"({100 * sup.get('support_frac_of_valid', 0):.1f}% of valid) "
+                        f"|fx|={sup.get('abs_fx_min')}-{sup.get('abs_fx_max')}"
+                    )
+                hz = tmp.get("f_peak_hz")
+                hz_txt = "" if hz is None else f" ({hz:+.2f} Hz)"
+                print(
+                    f"      temporal: peak={tmp.get('f_peak_cycles_per_frame', 0):+.4f}"
+                    f" cyc/frame{hz_txt} "
+                    f"prominence={tmp.get('prominence', 0):.1f} "
+                    f"static_frac={tmp.get('static_power_fraction', 0):.3f} "
+                    f"bins={tmp.get('n_bins')}"
+                )
+                if tmp.get("peak_is_static", True) and tmp.get(
+                    "f_nonstatic_peak_cycles_per_frame"
+                ) is not None:
+                    print(
+                        f"        strongest moving peak="
+                        f"{tmp['f_nonstatic_peak_cycles_per_frame']:+.4f} cyc/frame "
+                        f"prominence={tmp.get('nonstatic_prominence', 0):.1f}"
+                    )
+                failed = [k for k, v in c["checks"].items() if not v]
+                if failed:
+                    print(f"      failed checks: {', '.join(failed)}")
+
+    payload_path = out_dir / "confirm.json"
+    payload_path.write_text(
+        json.dumps({"root": str(root), "run": run_id, "channels": results}, indent=2),
+        encoding="utf-8",
+    )
+
+    print("\nSummary")
+    print(
+        f"{'trial':<12} {'chan':<6} {'q':>5} {'role':<20} {'verdict':<22} {'null FP':>8}"
+    )
+    print("-" * 78)
+    for payload in results:
+        ns = payload.get("null_summary") or {}
+        fp = (
+            f"{ns['n_false_positive']}/{ns['n_rows']}" if ns.get("n_rows") else "-"
+        )
+        for c in payload["candidates"]:
+            print(
+                f"{payload['label']:<12} {payload['channel']:<6} {c['q']:>5.0f} "
+                f"{c['role']:<20} {c['verdict']:<22} {fp:>8}"
+            )
+
+    print(f"\nDone. {payload_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m darkcurrent",
@@ -275,6 +447,45 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Append run to measurement history (default: {DEFAULT_MEASUREMENTS})",
     )
     ap_ch.set_defaults(func=cmd_characterize)
+
+    ap_cf = sub.add_parser(
+        "confirm",
+        help="Independently re-test ridge candidates without DC-adjacent backgrounds",
+    )
+    ap_cf.add_argument("--root", required=True, help="Folder containing dark recordings")
+    ap_cf.add_argument("--only", help="Comma-separated trial labels to restrict to")
+    ap_cf.add_argument("--channel", help="Comma-separated channels (e.g. ChanA)")
+    ap_cf.add_argument(
+        "--q",
+        help="Comma-separated q values to test instead of auto-picked candidates",
+    )
+    ap_cf.add_argument("--out", help="Artifact directory")
+    ap_cf.add_argument("--sample-n", type=int, default=128, help="Frames sampled for spectra")
+    ap_cf.add_argument(
+        "--dc-guard",
+        type=int,
+        default=12,
+        help="Rows around DC that may never serve as background",
+    )
+    ap_cf.add_argument(
+        "--fx-medfilt",
+        type=int,
+        default=81,
+        help="Width of the in-row median filter along fx",
+    )
+    ap_cf.add_argument(
+        "--hp-kernel",
+        type=int,
+        default=161,
+        help="Per-column boxcar width removed along y to suppress the DC skirt",
+    )
+    ap_cf.add_argument(
+        "--temporal-frames",
+        type=int,
+        default=512,
+        help="Consecutive frames used for the temporal character test",
+    )
+    ap_cf.set_defaults(func=cmd_confirm)
 
     args = ap.parse_args(argv)
     return args.func(args)
