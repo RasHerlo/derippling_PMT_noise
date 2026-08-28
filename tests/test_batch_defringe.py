@@ -172,6 +172,27 @@ def test_search_q_identity_lock():
     assert np.isfinite(score) or q == 6.0
 
 
+def test_choose_inspection_frames():
+    from batch_defringe.readout import choose_inspection_frames
+
+    rows = [
+        {"frame": i, "removed_rms": 10.0, "max_gate": 0.1, "family0_q": 81.0}
+        for i in range(1200)
+    ]
+    rows[50]["removed_rms"] = 100.0
+    rows[51]["removed_rms"] = 90.0
+    rows[3]["removed_rms"] = 0.01
+    rows[4]["removed_rms"] = 0.02
+    chosen = choose_inspection_frames(rows, n_frames=1200)
+    by_role: dict[str, list[int]] = {}
+    for c in chosen:
+        by_role.setdefault(c["role"], []).append(c["frame"])
+    assert by_role["anchor"] == [160, 1061]
+    assert by_role["strong"] == [50, 51]
+    assert by_role["weak"] == [3, 4]
+    assert len(chosen) == 6
+
+
 if __name__ == "__main__":
     test_averaging_and_effective_rate()
     test_mag_and_pixel_size_ignored()
@@ -181,4 +202,5 @@ if __name__ == "__main__":
     test_same_day_and_branches()
     test_recurrent_cluster_prefers_repeat()
     test_search_q_identity_lock()
+    test_choose_inspection_frames()
     print("ok")

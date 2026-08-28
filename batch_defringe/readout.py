@@ -20,8 +20,13 @@ from typing import Any
 import numpy as np
 import tifffile
 
+from .seed import EVAL_ANCHOR_FRAMES as INSPECTION_ANCHOR_FRAMES
+
 OUTPUT_DIRNAME = "defringe_v22"
 Y_RADIUS = 2  # matches clean_frame_v21 default ridge half-width in fy
+FRAMES_PER_PAGE = 3
+N_STRONG = 2
+N_WEAK = 2
 
 
 def output_dir_for(tif_path: Path) -> Path:
@@ -240,6 +245,163 @@ def _signed_limit(img: np.ndarray, p: float = 99.5) -> float:
     return mag
 
 
+def _qs_from_row(row: dict) -> list[float]:
+    qs: list[float] = []
+    i = 0
+    while f"family{i}_q" in row:
+        val = row.get(f"family{i}_q")
+        if val is not None and val != "":
+            qs.append(float(val))
+        i += 1
+    return qs
+
+
+def choose_inspection_frames(
+    rows: list[dict],
+    *,
+    n_frames: int,
+    anchors: tuple[int, ...] = INSPECTION_ANCHOR_FRAMES,
+    n_strong: int = N_STRONG,
+    n_weak: int = N_WEAK,
+) -> list[dict]:
+    """Pick anchors plus strongest/weakest removal for the overview PDF."""
+    if not rows or n_frames <= 0:
+        return []
+    by_frame = {int(r["frame"]): r for r in rows}
+    chosen: list[dict] = []
+    seen: set[int] = set()
+
+    def _add(idx: int, role: str) -> None:
+        if idx in seen or not (0 <= idx < n_frames):
+            return
+        row = by_frame.get(idx)
+        if row is None:
+            return
+        seen.add(idx)
+        chosen.append(
+            {
+                "frame": idx,
+                "role": role,
+                "removed_rms": float(row.get("removed_rms", 0.0) or 0.0),
+                "max_gate": float(row.get("max_gate", 0.0) or 0.0),
+            }
+        )
+
+    for a in anchors:
+        _add(int(a), "anchor")
+
+    ranked = sorted(rows, key=lambda r: float(r.get("removed_rms", 0.0) or 0.0), reverse=True)
+    for rec in ranked:
+        if sum(1 for c in chosen if c["role"] == "strong") >= n_strong:
+            break
+        _add(int(rec["frame"]), "strong")
+    for rec in reversed(ranked):
+        if sum(1 for c in chosen if c["role"] == "weak") >= n_weak:
+            break
+        _add(int(rec["frame"]), "weak")
+
+    order = {"anchor": 0, "strong": 1, "weak": 2}
+    chosen.sort(key=lambda c: (order.get(c["role"], 9), c["frame"]))
+    return chosen
+
+
+def load_inspection_triples(
+    *,
+    raw_tif: Path,
+    cleaned_tif: Path,
+    removed_tif: Path,
+    chosen: list[dict],
+    rows: list[dict] | None = None,
+) -> list[dict]:
+    """Load original | cleaned | removed for the chosen frame indices."""
+    if not chosen:
+        return []
+    by_frame = {int(r["frame"]): r for r in (rows or [])}
+    triples: list[dict] = []
+    with (
+        tifffile.TiffFile(raw_tif) as raw_tf,
+        tifffile.TiffFile(cleaned_tif) as clean_tf,
+        tifffile.TiffFile(removed_tif) as rem_tf,
+    ):
+        n = min(len(raw_tf.pages), len(clean_tf.pages), len(rem_tf.pages))
+        for spec in chosen:
+            idx = int(spec["frame"])
+            if not (0 <= idx < n):
+                continue
+            removed = np.asarray(rem_tf.pages[idx].asarray())
+            row = by_frame.get(idx, {})
+            rms = spec.get("removed_rms")
+            if rms is None:
+                rms = float(np.sqrt(np.mean(np.asarray(removed, dtype=np.float64) ** 2)))
+            triples.append(
+                {
+                    "frame": idx,
+                    "role": spec.get("role", ""),
+                    "raw": np.asarray(raw_tf.pages[idx].asarray()),
+                    "cleaned": np.asarray(clean_tf.pages[idx].asarray()),
+                    "removed": removed,
+                    "qs": _qs_from_row(row),
+                    "removed_rms": float(rms),
+                    "max_gate": float(spec.get("max_gate", row.get("max_gate", 0.0)) or 0.0),
+                }
+            )
+    return triples
+
+
+def draw_frame_inspection_page(
+    fig,
+    *,
+    title: str,
+    subtitle: str,
+    triples: list[dict],
+    cleaned_label: str = "cleaned",
+) -> None:
+    """One PDF page: original | cleaned | removed for up to FRAMES_PER_PAGE frames."""
+    fig.clear()
+    fig.patch.set_facecolor("white")
+    n = max(len(triples), 1)
+    fig.text(0.06, 0.97, title, fontsize=12, fontweight="bold", va="top")
+    fig.text(0.06, 0.935, subtitle, fontsize=8, va="top", color="0.25")
+
+    gs = fig.add_gridspec(
+        n,
+        3,
+        left=0.06,
+        right=0.98,
+        top=0.88,
+        bottom=0.05,
+        hspace=0.28,
+        wspace=0.12,
+    )
+    for i, trip in enumerate(triples):
+        raw = np.asarray(trip["raw"])
+        cleaned = np.asarray(trip["cleaned"])
+        removed = np.asarray(trip["removed"])
+        vmin, vmax = _percentile_limits(raw)
+        rlim = _signed_limit(removed)
+        rms = trip.get("removed_rms")
+        if rms is None:
+            rms = float(np.sqrt(np.mean(np.asarray(removed, dtype=np.float64) ** 2)))
+        labels = (
+            f"frame {trip['frame']}  ({trip['role']})  original",
+            cleaned_label,
+            f"removed  rms={float(rms):.3g}",
+        )
+        images = (raw, cleaned, removed)
+        cmaps = ("gray", "gray", "RdBu_r")
+        limits = ((vmin, vmax), (vmin, vmax), (-rlim, rlim))
+        for j in range(3):
+            ax = fig.add_subplot(gs[i, j])
+            ax.imshow(images[j], cmap=cmaps[j], vmin=limits[j][0], vmax=limits[j][1], interpolation="nearest")
+            ax.set_title(labels[j], fontsize=8)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if j == 0:
+                extra = trip.get("qs") or []
+                if extra:
+                    ax.set_ylabel("q=" + ",".join(f"{q:.0f}" for q in extra), fontsize=7)
+
+
 def write_overview_pdf(
     path: Path,
     *,
@@ -255,8 +417,11 @@ def write_overview_pdf(
     status: str = "ok",
     ladder: list[dict] | None = None,
     failure_message: str | None = None,
+    inspection_frames: list[dict] | None = None,
+    example_triples: list[dict] | None = None,
+    cleaned_label: str = "cleaned",
 ) -> None:
-    """One-page landscape overview. Raises if matplotlib is unavailable."""
+    """Summary page plus optional original | cleaned | removed inspection pages."""
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
     from matplotlib.patches import Rectangle
@@ -286,7 +451,7 @@ def write_overview_pdf(
         wspace=0.22,
         left=0.055,
         right=0.98,
-        top=0.84,
+        top=0.80 if inspection_frames else 0.84,
         bottom=0.07,
     )
 
@@ -306,6 +471,18 @@ def write_overview_pdf(
             f"residual pass {100 * summary.get('frac_residual_pass', 0):.1f}%"
         )
         fig.text(0.055, 0.90, stats, fontsize=8, va="top")
+        if inspection_frames:
+            shown = ",  ".join(
+                f"{c['frame']} ({c['role']})" for c in inspection_frames
+            )
+            fig.text(
+                0.055,
+                0.875,
+                f"inspection frames (later pages): {shown}",
+                fontsize=7.5,
+                va="top",
+                color="0.35",
+            )
 
     panels = [
         (gs[0, 0], mean_raw, "Mean before (raw)", "gray", vmin, vmax),
@@ -387,6 +564,14 @@ def write_overview_pdf(
         )
     elif len(frames):
         ax_tr.plot(frames, rms, color="0.15", lw=0.9, label="removed RMS")
+        mark = {"anchor": "C3", "strong": "C1", "weak": "C0"}
+        for spec in inspection_frames or []:
+            ax_tr.axvline(
+                spec["frame"],
+                color=mark.get(spec.get("role", ""), "0.5"),
+                lw=0.8,
+                alpha=0.85,
+            )
         ax_g = ax_tr.twinx()
         for j in range(n_fam):
             ax_g.plot(
@@ -426,6 +611,20 @@ def write_overview_pdf(
     fig.savefig(png_path, dpi=130)
     with PdfPages(path) as pdf:
         pdf.savefig(fig, dpi=150)
+        if example_triples:
+            for start in range(0, len(example_triples), FRAMES_PER_PAGE):
+                chunk = example_triples[start : start + FRAMES_PER_PAGE]
+                draw_frame_inspection_page(
+                    fig,
+                    title="Frame inspection — original | cleaned | removed",
+                    subtitle=(
+                        "Same clean as the TIFF. Periodic stripes in 'removed' are fringes; "
+                        "cells or structure means over-cleaning."
+                    ),
+                    triples=chunk,
+                    cleaned_label=cleaned_label,
+                )
+                pdf.savefig(fig, dpi=150)
     plt.close(fig)
 
 
@@ -493,6 +692,24 @@ def write_readout(
     write_mean_tif(mean_cleaned_path, mean_cleaned)
     write_mean_tif(mean_removed_path, mean_removed)
 
+    inspection_frames: list[dict] = []
+    example_triples: list[dict] = []
+    cleaned_tif = out_dir / f"{Path(tif_path).stem}_defringed_v22.tif"
+    removed_tif = removed_path_for(tif_path, out_dir)
+    if rows and Path(tif_path).is_file() and cleaned_tif.is_file() and removed_tif.is_file():
+        inspection_frames = choose_inspection_frames(rows, n_frames=n_frames)
+        try:
+            example_triples = load_inspection_triples(
+                raw_tif=Path(tif_path),
+                cleaned_tif=cleaned_tif,
+                removed_tif=removed_tif,
+                chosen=inspection_frames,
+                rows=rows,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"      frame inspection skipped: {exc}", flush=True)
+            example_triples = []
+
     pdf_path = out_dir / "overview.pdf"
     qs = ",".join(f"{float(f['q']):.1f}" for f in families) if families else "—"
     subtitle = (
@@ -513,6 +730,9 @@ def write_readout(
             rows=rows,
             summary=summary,
             status="ok",
+            inspection_frames=inspection_frames,
+            example_triples=example_triples,
+            cleaned_label="cleaned",
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      overview PDF skipped: {exc}", flush=True)
@@ -631,3 +851,77 @@ def write_failure_readout(
         "overview_pdf": pdf_path,
         "overview_png": png_path,
     }
+
+
+def _coerce_csv_row(row: dict) -> dict:
+    out: dict = {}
+    int_keys = {"frame", "n_active_families", "n_residual_passes"}
+    for k, v in row.items():
+        if v is None or v == "":
+            out[k] = v
+            continue
+        as_int = k in int_keys or k.endswith("_active") or k.endswith("_residual_pass")
+        try:
+            out[k] = int(float(v)) if as_int else float(v)
+        except (TypeError, ValueError):
+            out[k] = v
+    return out
+
+
+def rebuild_success_overview(out_dir: Path) -> Path:
+    """Rewrite overview.pdf from an existing successful defringe_v22 folder."""
+    out_dir = Path(out_dir)
+    payload = json.loads((out_dir / "families.json").read_text(encoding="utf-8"))
+    source_tif = Path(payload["source_tif"])
+    families = payload.get("families") or []
+    summary = payload.get("summary") or {}
+    computer = str(payload.get("computer") or "")
+    channel = str(payload.get("channel") or "")
+    qc = str(payload.get("qc") or "")
+
+    csv_path = out_dir / "per_frame.csv"
+    rows: list[dict] = []
+    if csv_path.is_file():
+        with open(csv_path, newline="", encoding="utf-8") as fh:
+            rows = [_coerce_csv_row(r) for r in csv.DictReader(fh)]
+    n_frames = int(summary.get("n_frames") or (max((int(r["frame"]) for r in rows), default=-1) + 1))
+
+    mean_raw = tifffile.imread(out_dir / "mean_raw.tif")
+    mean_cleaned = tifffile.imread(out_dir / "mean_cleaned.tif")
+    mean_removed = tifffile.imread(out_dir / "mean_removed.tif")
+
+    cleaned_hits = sorted(out_dir.glob("*_defringed_v22.tif"))
+    removed_hits = sorted(out_dir.glob("*_removed_v22.tif"))
+    if not cleaned_hits or not removed_hits:
+        raise FileNotFoundError(f"No cleaned/removed stacks in {out_dir}")
+
+    inspection_frames = choose_inspection_frames(rows, n_frames=n_frames) if rows else []
+    example_triples = []
+    if inspection_frames and source_tif.is_file():
+        example_triples = load_inspection_triples(
+            raw_tif=source_tif,
+            cleaned_tif=cleaned_hits[0],
+            removed_tif=removed_hits[0],
+            chosen=inspection_frames,
+            rows=rows,
+        )
+
+    qs = ",".join(f"{float(f['q']):.1f}" for f in families) if families else "—"
+    pdf_path = out_dir / "overview.pdf"
+    write_overview_pdf(
+        pdf_path,
+        title=f"v2.2 defringe readout — {channel}",
+        subtitle=f"{source_tif.name}  ·  {computer} / {channel}  ·  seed q={qs}  ·  {qc}",
+        mean_raw=mean_raw,
+        mean_cleaned=mean_cleaned,
+        mean_removed=mean_removed,
+        medspec=None,
+        families=families,
+        rows=rows,
+        summary=summary,
+        status="ok",
+        inspection_frames=inspection_frames,
+        example_triples=example_triples,
+        cleaned_label="cleaned",
+    )
+    return pdf_path

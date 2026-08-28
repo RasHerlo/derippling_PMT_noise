@@ -1,3 +1,14 @@
+# Progress handoff — 2026-08-28 evening (shutter-seed)
+
+Pickup: **`notes/HANDOFF.md`**. Haj Grant ChanA is still `needs_review`.
+In-stack shutter frames **756–760** are the real ChanA/ChanB fringe (q≈10 /
+q≈81). Probe PDFs under each channel’s `defringe_v22/shutter_seed_test/`.
+Next: flatten those five ChanA frames fully with a peaked fx comb, then use
+that comb + short q-track on live frames; do not re-seed ChanA from the
+z-ladder.
+
+---
+
 # Progress handoff — 2026-08-28
 
 Overview collector: https://github.com/RasHerlo/figure_for_cAMP_Neu_paper  

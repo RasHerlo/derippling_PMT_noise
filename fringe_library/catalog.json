@@ -340,6 +340,62 @@
       "origin": "darkcurrent:20260825T160621Z:PC250:ChanB",
       "notes": "trusted characterize run; geometry only",
       "computer_safe": "THORLABS_30_016"
+    },
+    {
+      "source": "live_clean",
+      "computer": "THORLABS_30_016",
+      "channel": "ChanB",
+      "date_utc": "2024-09-16T17:30:16+00:00",
+      "fingerprint": {
+        "frameRate": 15.136,
+        "pixelX": 512,
+        "pixelY": 512,
+        "fieldSize": 178.0,
+        "pixelSizeUM": 1.623,
+        "flybackCycles": 12,
+        "flybackLines": 130,
+        "dwellTime": 0.08,
+        "scanMode": 1,
+        "twoWayAlignment": -12,
+        "averageMode": 1,
+        "averageNum": 6,
+        "areaMode": 0,
+        "mag": 16.0,
+        "gainA": 40.0,
+        "gainB": 40.0,
+        "averagingN": 6,
+        "effectiveFrameRate": 2.5226666666666664
+      },
+      "families": [
+        {
+          "q": 81.0,
+          "hi": 176.0,
+          "paired": true,
+          "row_score": 35.1307392942936,
+          "pair_score": 4.234329548738773,
+          "fx_ranges": [
+            [
+              -29,
+              -22
+            ],
+            [
+              -18,
+              -11
+            ],
+            [
+              11,
+              18
+            ],
+            [
+              22,
+              29
+            ]
+          ]
+        }
+      ],
+      "origin": "F:\\bPACNewData2026\\Haj Grant Example\\DATA\\ChanB\\ChanB_stk.tif",
+      "notes": "ok update_frac=0.53",
+      "computer_safe": "THORLABS_30_016"
     }
   ],
   "note": "Geometry-only fringe library. A=same-day DC, B=older DC, C=live_clean. Amplitude is never copied."

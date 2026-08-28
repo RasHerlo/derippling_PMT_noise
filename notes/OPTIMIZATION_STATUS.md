@@ -7,7 +7,7 @@ This file + `optimization_manifest.json` are the handoff surface for that repo.
 **Repo:** https://github.com/RasHerlo/derippling_PMT_noise  
 **Sandbox data:** `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`  
 **Machine-readable twin:** [`optimization_manifest.json`](optimization_manifest.json)  
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-28 evening (shutter-seed probe)
 
 ---
 
@@ -95,3 +95,4 @@ defringe_runs/v22_full_seeded500/
 3. suite2p MC bakeoff on v22 (± SUPPORT after retrain)  
 4. Optional: harden full-stack detection (drop 500fr seed requirement)  
 5. **Implemented 2026-08-28 (`batch_defringe` v0.4.0):** assume `mag`/`pixelSizeUM` do not affect PMT fringes (dropped from prior key). Library A/B/C in `fringe_library/catalog.json`. Failure PDF + inspect-only ladder. Recurrent seeds, track identity lock. Single TIFF = `process_stack`. Still need a **shuttered DC** at Haj Grant raster (`notes/DARKCURRENT.md` §6) before ChanA can be library-seeded.  
+6. **2026-08-28 evening:** in-stack shutter 756–760 on Haj Grant is a same-file DC. ChanB q≈81 already matched it; ChanA seed is q≈10, not the z-ladder q=109. Pickup `notes/HANDOFF.md`. Do not promote ChanA until shutter flatten is spatially flat and live *removed* matches that pattern.  

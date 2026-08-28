@@ -51,6 +51,20 @@ LADDER_RUNGS = [
     },
 ]
 
+# Sequential thresholds for the needs_review visual eval (not applied to the stack).
+EVAL_Z_STEPS = [
+    {"name": "z5.5_paired", "row_z": 5.5, "pair_z": 3.5, "allow_standalone": False},
+    {"name": "z5.5_unpaired", "row_z": 5.5, "pair_z": 3.5, "allow_standalone": True},
+    {"name": "z5.0", "row_z": 5.0, "pair_z": 3.2, "allow_standalone": True},
+    {"name": "z4.5", "row_z": 4.5, "pair_z": 2.8, "allow_standalone": True},
+    {"name": "z4.0", "row_z": 4.0, "pair_z": 2.5, "allow_standalone": True},
+    {"name": "z3.5", "row_z": 3.5, "pair_z": 2.2, "allow_standalone": True},
+    {"name": "z3.0", "row_z": 3.0, "pair_z": 2.0, "allow_standalone": True},
+]
+
+# Frames a human already flagged as fringe-obvious (0-based TIFF index).
+EVAL_ANCHOR_FRAMES = (160, 1061)
+
 
 def sample_median_spectrum(
     tf: tifffile.TiffFile,
@@ -243,6 +257,24 @@ def _hits_for_rung(block_specs: list[dict], rung: dict) -> list[dict]:
         if families:
             hits.append({**block, "families": families})
     return hits
+
+
+def families_at_rung(
+    block_specs: list[dict],
+    rung: dict,
+    medspec: np.ndarray | None = None,
+) -> tuple[list[dict], np.ndarray | None, dict]:
+    """Detect + cluster + hydrate families for one threshold rung."""
+    hits = _hits_for_rung(block_specs, rung)
+    families, spec, info = cluster_recurrent_families(hits)
+    use_spec = spec if spec is not None else medspec
+    if families and use_spec is not None:
+        families = hydrate_families(families, use_spec)
+    info["rung"] = rung.get("name")
+    info["row_z"] = rung.get("row_z")
+    info["pair_z"] = rung.get("pair_z")
+    info["allow_standalone"] = bool(rung.get("allow_standalone"))
+    return families, use_spec, info
 
 
 def detect_fringe_rich(

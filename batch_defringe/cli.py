@@ -262,7 +262,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Ask Y/n before starting (default: start after root is chosen)",
     )
+    ap.add_argument(
+        "--rebuild-overview",
+        type=Path,
+        help="Rewrite overview.pdf for an existing defringe_v22 folder (no re-clean)",
+    )
     args = ap.parse_args(argv)
+
+    if args.rebuild_overview is not None:
+        from .readout import rebuild_success_overview
+
+        pdf = rebuild_success_overview(args.rebuild_overview)
+        print(f"Wrote {pdf}")
+        return 0
 
     root = args.root
     picked_via_gui = False

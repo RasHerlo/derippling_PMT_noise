@@ -18,6 +18,7 @@ if str(_GPT) not in sys.path:
 
 from pmt_fringe_raw_adaptive_v22 import clean_frame_v22  # noqa: E402
 
+from .eval_report import write_eval_report
 from .experiment_xml import fingerprint_compatible
 from .library import append_catalog_record, append_local_record, lookup_prior, make_record
 from .priors import load_prior, save_prior
@@ -29,6 +30,7 @@ from .readout import (
     write_readout,
 )
 from .seed import (
+    collect_block_spectra,
     detect_fringe_rich,
     hydrate_families,
     ladder_inspect,
@@ -95,30 +97,49 @@ def _write_review(
     prior_branch: str | None,
     ladder: list[dict] | None,
     message: str,
+    block_specs: list[dict] | None = None,
 ) -> Path | None:
     n, h, w = tf.series[0].shape
     mean_raw = sample_mean_frame(tf)
-    paths = write_failure_readout(
-        out_dir,
-        tif_path=tif_path,
-        families=families,
-        params=PACK_D,
-        seed_info=seed_info,
-        medspec=medspec,
-        n_frames=n,
-        frame_hw=(h, w),
-        source_shape=tf.series[0].shape,
-        mean_raw=mean_raw,
-        computer=computer,
-        channel=channel,
-        fingerprint=fingerprint,
-        qc=qc,
-        used_prior=used_prior,
-        reseeded=reseeded,
-        prior_branch=prior_branch,
-        ladder=ladder,
-        failure_message=message,
-    )
+    specs = list(block_specs or [])
+    if not specs:
+        specs = collect_block_spectra(tf)
+    try:
+        paths = write_eval_report(
+            out_dir,
+            tf=tf,
+            tif_path=tif_path,
+            block_specs=specs,
+            medspec=medspec,
+            mean_raw=mean_raw,
+            params=PACK_D,
+            computer=computer,
+            channel=channel,
+            message=message,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"      eval report failed ({exc}); writing basic needs_review page", flush=True)
+        paths = write_failure_readout(
+            out_dir,
+            tif_path=tif_path,
+            families=families,
+            params=PACK_D,
+            seed_info=seed_info,
+            medspec=medspec,
+            n_frames=n,
+            frame_hw=(h, w),
+            source_shape=tf.series[0].shape,
+            mean_raw=mean_raw,
+            computer=computer,
+            channel=channel,
+            fingerprint=fingerprint,
+            qc=qc,
+            used_prior=used_prior,
+            reseeded=reseeded,
+            prior_branch=prior_branch,
+            ladder=ladder,
+            failure_message=message,
+        )
     pdf = paths.get("overview_pdf")
     return pdf if isinstance(pdf, Path) else None
 
@@ -240,6 +261,7 @@ def process_stack(
                 prior_branch=prior_branch,
                 ladder=ladder,
                 message=msg,
+                block_specs=block_specs,
             )
             return ProcessResult(
                 status="needs_review",
@@ -287,6 +309,7 @@ def process_stack(
                     prior_branch=prior_branch,
                     ladder=ladder,
                     message=msg,
+                    block_specs=block_specs,
                 )
                 return ProcessResult(
                     status="needs_review",
@@ -323,6 +346,7 @@ def process_stack(
                 prior_branch=prior_branch,
                 ladder=ladder,
                 message=msg,
+                block_specs=block_specs,
             )
             return ProcessResult(
                 status="needs_review",
