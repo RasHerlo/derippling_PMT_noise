@@ -173,6 +173,10 @@ def write_families_json(
     used_prior: bool,
     reseeded: bool,
     rows: list[dict],
+    status: str = "ok",
+    prior_branch: str | None = None,
+    ladder: list[dict] | None = None,
+    failure_message: str | None = None,
 ) -> dict:
     rms = np.array([r["removed_rms"] for r in rows], dtype=float) if rows else np.zeros(0)
     n_active = (
@@ -207,6 +211,10 @@ def write_families_json(
         "qc": qc,
         "used_prior": bool(used_prior),
         "reseeded": bool(reseeded),
+        "status": status,
+        "prior_branch": prior_branch,
+        "ladder": _jsonable(ladder) if ladder else None,
+        "failure_message": failure_message,
         "families": [family_public(f) for f in families],
         "summary": summary,
     }
@@ -244,6 +252,9 @@ def write_overview_pdf(
     families: list[dict],
     rows: list[dict],
     summary: dict,
+    status: str = "ok",
+    ladder: list[dict] | None = None,
+    failure_message: str | None = None,
 ) -> None:
     """One-page landscape overview. Raises if matplotlib is unavailable."""
     import matplotlib.pyplot as plt
@@ -282,20 +293,24 @@ def write_overview_pdf(
     fig.text(0.055, 0.97, title, fontsize=13, fontweight="bold", va="top")
     fig.text(0.055, 0.935, subtitle, fontsize=8.5, va="top", color="0.25")
 
-    stats = (
-        f"frames {summary.get('n_frames', len(rows))}   "
-        f"families {summary.get('n_families', n_fam)}   "
-        f"active on {100 * summary.get('frac_frames_any_active', 0):.1f}% of frames   "
-        f"median removed RMS {summary.get('median_removed_rms', 0):.3g}   "
-        f"max {summary.get('max_removed_rms', 0):.3g}   "
-        f"residual pass {100 * summary.get('frac_residual_pass', 0):.1f}%"
-    )
-    fig.text(0.055, 0.90, stats, fontsize=8, va="top")
+    if status != "ok":
+        fail = failure_message or status
+        fig.text(0.055, 0.90, f"STATUS: {status}  —  {fail}", fontsize=8, va="top", color="0.6")
+    else:
+        stats = (
+            f"frames {summary.get('n_frames', len(rows))}   "
+            f"families {summary.get('n_families', n_fam)}   "
+            f"active on {100 * summary.get('frac_frames_any_active', 0):.1f}% of frames   "
+            f"median removed RMS {summary.get('median_removed_rms', 0):.3g}   "
+            f"max {summary.get('max_removed_rms', 0):.3g}   "
+            f"residual pass {100 * summary.get('frac_residual_pass', 0):.1f}%"
+        )
+        fig.text(0.055, 0.90, stats, fontsize=8, va="top")
 
     panels = [
         (gs[0, 0], mean_raw, "Mean before (raw)", "gray", vmin, vmax),
-        (gs[0, 1], mean_cleaned, "Mean after (cleaned)", "gray", vmin, vmax),
-        (gs[0, 2], mean_removed, "Mean removed (raw − cleaned)", "RdBu_r", -rlim, rlim),
+        (gs[0, 1], mean_cleaned, "Mean after (cleaned)" if status == "ok" else "Not cleaned (needs review)", "gray", vmin, vmax),
+        (gs[0, 2], mean_removed, "Mean removed (raw − cleaned)" if status == "ok" else "No remainder (not applied)", "RdBu_r", -rlim, rlim),
     ]
     for slot, img, label, cmap, lo, hi in panels:
         ax = fig.add_subplot(slot)
@@ -351,7 +366,26 @@ def write_overview_pdf(
     ax_tr = fig.add_subplot(inner[0])
     ax_q = fig.add_subplot(inner[1], sharex=ax_tr)
     ax_tr.set_title("Cleaning heaviness and tracked q across frames", fontsize=9)
-    if len(frames):
+    if status != "ok" and not len(frames):
+        ax_tr.axis("off")
+        ax_q.axis("off")
+        lines = ["Inspect-only ladder (not applied):"]
+        for rung in ladder or []:
+            name = rung.get("rung", "?")
+            fams = rung.get("families") or []
+            qs = ", ".join(f"q={f.get('q')}" for f in fams) if fams else "(none)"
+            lines.append(f"  {name}: {qs}")
+        ax_tr.text(
+            0.02,
+            0.98,
+            "\n".join(lines) or "No ladder candidates",
+            va="top",
+            ha="left",
+            fontsize=8,
+            family="monospace",
+            transform=ax_tr.transAxes,
+        )
+    elif len(frames):
         ax_tr.plot(frames, rms, color="0.15", lw=0.9, label="removed RMS")
         ax_g = ax_tr.twinx()
         for j in range(n_fam):
@@ -416,6 +450,7 @@ def write_readout(
     qc: str,
     used_prior: bool,
     reseeded: bool,
+    prior_branch: str | None = None,
 ) -> dict[str, Path | None]:
     """Write mask, per-frame table, mean TIFFs, and overview PDF into out_dir."""
     out_dir = Path(out_dir)
@@ -444,6 +479,7 @@ def write_readout(
         used_prior=used_prior,
         reseeded=reseeded,
         rows=rows,
+        prior_branch=prior_branch,
     )
 
     mask = fft_mask_image(frame_hw, families)
@@ -476,6 +512,7 @@ def write_readout(
             families=families,
             rows=rows,
             summary=summary,
+            status="ok",
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      overview PDF skipped: {exc}", flush=True)
@@ -489,6 +526,108 @@ def write_readout(
         "mean_raw": mean_raw_path,
         "mean_cleaned": mean_cleaned_path,
         "mean_removed": mean_removed_path,
+        "overview_pdf": pdf_path,
+        "overview_png": png_path,
+    }
+
+
+def write_failure_readout(
+    out_dir: Path,
+    *,
+    tif_path: Path,
+    families: list[dict],
+    params: dict,
+    seed_info: dict,
+    medspec: np.ndarray | None,
+    n_frames: int,
+    frame_hw: tuple[int, int],
+    source_shape: tuple[int, ...],
+    mean_raw: np.ndarray,
+    computer: str,
+    channel: str,
+    fingerprint: dict,
+    qc: str,
+    used_prior: bool,
+    reseeded: bool,
+    prior_branch: str | None = None,
+    ladder: list[dict] | None = None,
+    failure_message: str = "needs_review",
+) -> dict[str, Path | None]:
+    """Write a needs_review overview (no cleaned/removed stacks)."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    zeros = np.zeros_like(mean_raw, dtype=np.float64)
+
+    json_path = out_dir / "families.json"
+    summary = write_families_json(
+        json_path,
+        families=families,
+        params=params,
+        seed_info=seed_info,
+        n_frames=n_frames,
+        shape=source_shape,
+        source_tif=tif_path,
+        computer=computer,
+        channel=channel,
+        fingerprint=fingerprint,
+        qc=qc,
+        used_prior=used_prior,
+        reseeded=reseeded,
+        rows=[],
+        status="needs_review",
+        prior_branch=prior_branch,
+        ladder=ladder,
+        failure_message=failure_message,
+    )
+
+    ladder_path = out_dir / "ladder.json"
+    ladder_path.write_text(
+        json.dumps(_jsonable({"message": failure_message, "ladder": ladder or []}), indent=2),
+        encoding="utf-8",
+    )
+
+    if families:
+        mask = fft_mask_image(frame_hw, families)
+        mask_path = out_dir / "mask_fft.tif"
+        tifffile.imwrite(mask_path, mask, photometric="minisblack")
+    else:
+        mask_path = None
+
+    mean_raw_path = out_dir / "mean_raw.tif"
+    write_mean_tif(mean_raw_path, mean_raw)
+
+    pdf_path = out_dir / "overview.pdf"
+    subtitle = (
+        f"{tif_path.name}  ·  {computer} / {channel}  ·  "
+        f"{failure_message}"
+    )
+    png_path: Path | None = pdf_path.with_suffix(".png")
+    try:
+        write_overview_pdf(
+            pdf_path,
+            title=f"v2.2 defringe — NEEDS REVIEW — {channel}",
+            subtitle=subtitle,
+            mean_raw=mean_raw,
+            mean_cleaned=zeros,
+            mean_removed=zeros,
+            medspec=medspec,
+            families=families,
+            rows=[],
+            summary=summary,
+            status="needs_review",
+            ladder=ladder,
+            failure_message=failure_message,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"      overview PDF skipped: {exc}", flush=True)
+        pdf_path = None
+        png_path = None
+
+    return {
+        "families_json": json_path,
+        "ladder_json": ladder_path,
+        "mask_fft": mask_path,
+        "mean_raw": mean_raw_path,
         "overview_pdf": pdf_path,
         "overview_png": png_path,
     }

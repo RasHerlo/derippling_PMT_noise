@@ -7,7 +7,7 @@ This file + `optimization_manifest.json` are the handoff surface for that repo.
 **Repo:** https://github.com/RasHerlo/derippling_PMT_noise  
 **Sandbox data:** `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`  
 **Machine-readable twin:** [`optimization_manifest.json`](optimization_manifest.json)  
-**Last updated:** 2026-08-26
+**Last updated:** 2026-08-28
 
 ---
 
@@ -70,7 +70,7 @@ ratio_start=1.4  ratio_full=3.5
 | 2026-08-19 | Full-stack v2.2 seeded | → `inputs/defringed_v22/` | `v22_full_seeded500` |
 | 2026-08-25 | Dark-current controls (`darkcurrent/`) | First measured characterisation of the fringe layer on Shinano | `notes/DARKCURRENT.md` |
 | 2026-08-26 | `darkcurrent confirm` battery | ChanA q≈6 confirmed real and time-varying, 0 false positives | `notes/DARKCURRENT.md` §3.1c |
-| 2026-08-26 | Defringe readout (`batch_defringe` v0.3.0) | Every clean now writes remainder stack, per-frame numbers, mask, PDF | `defringe_v22/` beside each stack |
+| 2026-08-28 | `batch_defringe` v0.4.0 | Raster fingerprint (drop mag/µm; add scanMode/avg/alignment); library A/B/C; recurrent seed; track lock; failure PDF; single TIFF = batch | `fringe_library/catalog.json` |
 
 ---
 
@@ -94,3 +94,4 @@ defringe_runs/v22_full_seeded500/
 2. SUPPORT retrain on `defringed_v22`  
 3. suite2p MC bakeoff on v22 (± SUPPORT after retrain)  
 4. Optional: harden full-stack detection (drop 500fr seed requirement)  
+5. **Implemented 2026-08-28 (`batch_defringe` v0.4.0):** assume `mag`/`pixelSizeUM` do not affect PMT fringes (dropped from prior key). Library A/B/C in `fringe_library/catalog.json`. Failure PDF + inspect-only ladder. Recurrent seeds, track identity lock. Single TIFF = `process_stack`. Still need a **shuttered DC** at Haj Grant raster (`notes/DARKCURRENT.md` §6) before ChanA can be library-seeded.  

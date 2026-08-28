@@ -31,21 +31,27 @@ pip install -r requirements.txt
 
 ### Single stack
 
+Same path as batch (`process_stack`): fringe-rich seed, library/cache prior, QC,
+`defringe_v22/` report (including `needs_review`).
+
 ```bash
+python reference/gpt/pmt_fringe_raw_adaptive_v22.py ChanA_stk.tif
+# optional explicit output:
 python reference/gpt/pmt_fringe_raw_adaptive_v22.py ChanA_stk.tif ^
-  -o ChanA_defringe/ChanA_stk_defringed_v22.tif ^
-  --diagnostics ChanA_defringe/diagnostics
+  -o ChanA/defringe_v22/ChanA_stk_defringed_v22.tif
 ```
 
-### Batch over an experiment root — `batch_defringe` v0.3.0
+### Batch over an experiment root — `batch_defringe` v0.4.0
 
 Package: `batch_defringe/` (`python -m batch_defringe`).
 
 **Default run:** opens a folder dialog, then walks the chosen root for
 `DATA/**/ChanA_stk.tif` and `DATA/**/ChanB_stk.tif`, runs **v2.2 / pack_D**, and
 writes each channel into a `defringe_v22/` folder beside the raw stack. Existing
-cleaned stacks in that folder are skipped (and reported). Soft priors are keyed by
-microscope (`Experiment.xml` `<Computer>`) × channel.
+cleaned stacks in that folder are skipped (and reported). Soft priors come from
+the committed library (`fringe_library/catalog.json`, branches A/B/C) and from
+`{root}/.defringe_cache/` (Computer × channel). Raster match ignores objective
+`mag` / `pixelSizeUM`. Failed seeds still write `defringe_v22/overview.pdf`.
 
 ```bash
 python -m batch_defringe
@@ -78,21 +84,26 @@ families.json                 # FFT ridge mask definition + summary
 mask_fft.tif                  # 2-D FFT-domain support of seeded families
 mean_raw.tif / mean_cleaned.tif / mean_removed.tif
 overview.pdf                  # averages, mask, cleaning heaviness vs frame
+                              # (also written on needs_review, with inspect-only ladder)
 overview.png                  # same page as a preview
+ladder.json                   # only on needs_review: extra candidate rungs (not applied)
 ```
 
-Priors + run logs: `{root}/.defringe_cache/`.
+Priors + run logs: `{root}/.defringe_cache/`. Learned geometry also appends to
+`fringe_library/catalog.json` (q/fx only, never amplitude).
 
 #### Why it is designed this way
 
 | Choice | Reason |
 |--------|--------|
-| **Separate from single-stack CLI** | Batch discovery, microscope caching, and QC are a different job from cleaning one TIFF; keeps `pmt_fringe_raw_adaptive_v22.py` simple. |
-| **Soft priors, not hard locks** | Within a group, scans share PMT/settings but `q` still drifts (even within one stack). Priors guide tracking; each stack can reseed if QC fails. |
+| **Single-stack CLI = batch** | `pmt_fringe_raw_adaptive_v22.py` calls the same `process_stack` as `python -m batch_defringe`. |
+| **Soft priors, not hard locks** | Within a group, scans share PMT/settings but `q` still drifts (even within one stack). Priors guide tracking; each stack can reseed if QC fails. Library families must still show fx support on **this** stack. |
 | **Cache by `Computer` × channel** | `Experiment.xml` `<Computer name="..."/>` marks which microscope recorded the trial (e.g. `THORLABS_30_016` vs `USER-PC`). ChanA/ChanB use different PMTs, so priors are never shared across channels. |
-| **LSM fingerprint check** | Same computer with a large change in `frameRate` / `fieldSize` / pixel size invalidates pixel-`q` priors — reseeds instead of forcing a wrong family. |
-| **Fringe-rich seed on long stacks** | Full-stack median detection can pick a weak/wrong ridge (seen on ChanA). First seed (and reseeds) prefer strong blocks, so dedicated 500fr seed files are not required. |
-| **Per-stack sanity checks** | Track-update fraction and `q` drift vs prior; failures go to `needs_review` in the run log rather than silently promoting bad cleans. |
+| **Raster fingerprint** | Match `pixelX/Y`, listed `frameRate`, `fieldSize`, `scanMode`, averaging N, flyback, and two-way alignment when `scanMode=0`. **Not** `mag` / `pixelSizeUM`. Effective stack fps = listed / N. |
+| **Fringe-rich recurrent seed** | Families that recur across 50-frame blocks are preferred over a single strongest block. |
+| **Track lock** | `track_search=10` with identity lock so one family cannot hop onto another's `q`. |
+| **Inspect-only ladder** | If the safe paired seed fails, extra rungs (standalone, lower z, library q) are written to the PDF — not applied. |
+| **Per-stack sanity checks** | Track-update fraction and `q` drift vs prior; failures go to `needs_review` **with** a report rather than silently promoting bad cleans. |
 | **Root-local `.defringe_cache/`** | Priors travel with the dataset; other workstations reuse them after the same `pip install -r requirements.txt` setup. |
 | **Skip existing outputs** | Safe re-runs on large trees; already-defringed stacks in `defringe_v22/` are reported as skipped. |
 | **Readout next to the clean** | Every successful clean writes the remainder stack, per-frame numbers, FFT mask, and a one-page PDF so later processing can track what was removed. |

@@ -149,6 +149,7 @@ def run_batch(
                     diag_dir=diag,
                     force_fresh_seed=job.missing_xml,
                     update_prior_on_success=not job.missing_xml,
+                    recording_date=job.date_utc,
                 )
             except Exception as exc:  # noqa: BLE001
                 print(f"    ERROR: {exc}")
@@ -175,6 +176,8 @@ def run_batch(
             extra = []
             if result.used_prior:
                 extra.append("prior")
+                if result.prior_branch:
+                    extra.append(f"branch={result.prior_branch}")
             if result.reseeded:
                 extra.append("reseed")
             if job.missing_xml:
@@ -185,7 +188,7 @@ def run_batch(
                 f"    {tag}: {result.message}"
                 + (f" ({'; '.join(extra)})" if extra else "")
             )
-            if result.status == "ok" and result.out_dir is not None:
+            if result.status in ("ok", "needs_review") and result.out_dir is not None:
                 print(f"    readout: {result.out_dir}")
 
             logfh.write(
@@ -206,6 +209,7 @@ def run_batch(
                         else None,
                         "used_prior": result.used_prior,
                         "reseeded": result.reseeded,
+                        "prior_branch": result.prior_branch,
                         "families_q": result.families_q,
                     }
                 )

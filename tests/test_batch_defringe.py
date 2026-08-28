@@ -1,0 +1,184 @@
+"""Unit tests for raster fingerprint, library branches, recurrent seed, q lock."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import numpy as np
+
+_REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "reference" / "gpt"))
+
+from batch_defringe.experiment_xml import (  # noqa: E402
+    averaging_n,
+    effective_frame_rate,
+    finalize_fingerprint,
+    fingerprint_compatible,
+)
+from batch_defringe.library import (  # noqa: E402
+    classify_record,
+    lookup_prior,
+    make_record,
+    same_calendar_day,
+)
+from batch_defringe.seed import cluster_recurrent_families  # noqa: E402
+from pmt_fringe_raw_adaptive import search_q  # noqa: E402
+
+
+def _fp(**kwargs):
+    base = dict(
+        frameRate=15.136,
+        pixelX=512,
+        pixelY=512,
+        fieldSize=178.0,
+        pixelSizeUM=1.623,
+        flybackCycles=12,
+        scanMode=1,
+        twoWayAlignment=-12,
+        averageMode=1,
+        averageNum=6,
+        mag=16.0,
+    )
+    base.update(kwargs)
+    return finalize_fingerprint(base)
+
+
+def test_averaging_and_effective_rate():
+    assert averaging_n({"averageMode": 0, "averageNum": 2}) == 1
+    assert averaging_n({"averageMode": 1, "averageNum": 6}) == 6
+    fp = _fp()
+    assert abs(fp["effectiveFrameRate"] - 15.136 / 6) < 1e-9
+    assert abs(effective_frame_rate(fp) - 15.136 / 6) < 1e-9
+
+
+def test_mag_and_pixel_size_ignored():
+    a = _fp(mag=16.0, pixelSizeUM=1.623)
+    b = _fp(mag=27.77, pixelSizeUM=0.935)
+    assert fingerprint_compatible(a, b)
+
+
+def test_scan_mode_mismatch():
+    a = _fp(scanMode=1)
+    b = _fp(scanMode=0, frameRate=29.595, averageMode=0, averageNum=2, twoWayAlignment=0)
+    assert not fingerprint_compatible(a, b)
+
+
+def test_two_way_alignment_matters_for_scanmode_0():
+    a = _fp(scanMode=0, frameRate=29.595, averageMode=0, averageNum=2, twoWayAlignment=0)
+    b = _fp(scanMode=0, frameRate=29.595, averageMode=0, averageNum=2, twoWayAlignment=-17)
+    assert not fingerprint_compatible(a, b)
+    c = _fp(scanMode=0, frameRate=29.595, averageMode=0, averageNum=2, twoWayAlignment=-1)
+    assert fingerprint_compatible(a, c)
+
+
+def test_averaging_mismatch():
+    a = _fp(averageNum=6)
+    b = _fp(averageNum=1)
+    assert not fingerprint_compatible(a, b)
+
+
+def test_same_day_and_branches():
+    assert same_calendar_day("2024-09-16T17:30:16+00:00", "2024-09-16T08:00:00+00:00")
+    assert not same_calendar_day("2024-09-16T17:30:16+00:00", "2024-09-17T17:30:16+00:00")
+
+    fp = _fp()
+    rec_dc = make_record(
+        source="darkcurrent",
+        computer="THORLABS_30_016",
+        channel="ChanA",
+        fingerprint=fp,
+        families=[{"q": 6, "hi": 250, "paired": True, "row_score": 10}],
+        date_utc="2024-09-16T12:00:00+00:00",
+        origin="dc",
+    )
+    rec_live = make_record(
+        source="live_clean",
+        computer="THORLABS_30_016",
+        channel="ChanA",
+        fingerprint=fp,
+        families=[{"q": 14, "hi": 242, "paired": True, "row_score": 12}],
+        date_utc="2024-09-10T12:00:00+00:00",
+        origin="live",
+    )
+    assert (
+        classify_record(
+            rec_dc,
+            computer="THORLABS_30_016",
+            channel="ChanA",
+            fingerprint=fp,
+            recording_date="2024-09-16T19:00:00+00:00",
+        )
+        == "A"
+    )
+    assert (
+        classify_record(
+            rec_dc,
+            computer="THORLABS_30_016",
+            channel="ChanA",
+            fingerprint=fp,
+            recording_date="2024-09-20T19:00:00+00:00",
+        )
+        == "B"
+    )
+    assert (
+        classify_record(
+            rec_live,
+            computer="THORLABS_30_016",
+            channel="ChanA",
+            fingerprint=fp,
+            recording_date="2024-09-16T19:00:00+00:00",
+        )
+        == "C"
+    )
+
+    hit = lookup_prior(
+        computer="THORLABS_30_016",
+        channel="ChanA",
+        fingerprint=fp,
+        recording_date="2024-09-16T19:00:00+00:00",
+        catalog={"version": 1, "records": [rec_dc, rec_live]},
+    )
+    assert hit is not None
+    assert hit["branch"] == "A"
+    assert hit["families"][0]["q"] == 6
+
+
+def test_recurrent_cluster_prefers_repeat():
+    spec = np.zeros((16, 16))
+    fam6 = {"q": 6.0, "hi": 10.0, "paired": True, "row_score": 8.0}
+    fam14 = {"q": 14.0, "hi": 2.0, "paired": True, "row_score": 20.0}
+    hits = [
+        {"start": 0, "stop": 50, "medspec": spec, "families": [fam6]},
+        {"start": 50, "stop": 100, "medspec": spec, "families": [fam6]},
+        {"start": 100, "stop": 150, "medspec": spec, "families": [fam14]},
+    ]
+    families, _, info = cluster_recurrent_families(hits, max_families=1)
+    assert len(families) == 1
+    assert families[0]["q"] == 6.0
+    assert families[0]["n_blocks"] == 2
+    assert info["chosen"][0]["n_blocks"] == 2
+
+
+def test_search_q_identity_lock():
+    rng = np.random.default_rng(0)
+    logamp = rng.normal(size=(64, 64))
+    logamp[32 + 14, :] += 5.0
+    xvalid = np.ones(64, dtype=bool)
+    xvalid[:5] = False
+    q, score = search_q(logamp, 6, False, xvalid, 10, forbidden_qs=[14], forbidden_radius=3)
+    assert abs(q - 14) >= 3
+    assert np.isfinite(score) or q == 6.0
+
+
+if __name__ == "__main__":
+    test_averaging_and_effective_rate()
+    test_mag_and_pixel_size_ignored()
+    test_scan_mode_mismatch()
+    test_two_way_alignment_matters_for_scanmode_0()
+    test_averaging_mismatch()
+    test_same_day_and_branches()
+    test_recurrent_cluster_prefers_repeat()
+    test_search_q_identity_lock()
+    print("ok")

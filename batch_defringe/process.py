@@ -19,17 +19,22 @@ if str(_GPT) not in sys.path:
 from pmt_fringe_raw_adaptive_v22 import clean_frame_v22  # noqa: E402
 
 from .experiment_xml import fingerprint_compatible
+from .library import append_catalog_record, append_local_record, lookup_prior, make_record
 from .priors import load_prior, save_prior
 from .readout import (
     cleaned_path_for,
     removed_path_for,
     tracking_row,
+    write_failure_readout,
     write_readout,
 )
 from .seed import (
     detect_fringe_rich,
     hydrate_families,
+    ladder_inspect,
+    library_family_supported,
     qc_tracking,
+    sample_mean_frame,
     sample_median_spectrum,
     track_all,
 )
@@ -62,10 +67,60 @@ class ProcessResult:
     used_prior: bool = False
     reseeded: bool = False
     families_q: list[float] | None = None
+    prior_branch: str | None = None
 
 
 def default_output_path(tif_path: Path) -> Path:
     return cleaned_path_for(tif_path)
+
+
+def _pop_block_specs(seed_info: dict) -> list[dict]:
+    return list(seed_info.pop("_block_specs", []) or [])
+
+
+def _write_review(
+    *,
+    tif_path: Path,
+    out_dir: Path,
+    tf: tifffile.TiffFile,
+    families: list[dict],
+    seed_info: dict,
+    medspec: np.ndarray | None,
+    computer: str,
+    channel: str,
+    fingerprint: dict,
+    qc: str,
+    used_prior: bool,
+    reseeded: bool,
+    prior_branch: str | None,
+    ladder: list[dict] | None,
+    message: str,
+) -> Path | None:
+    n, h, w = tf.series[0].shape
+    mean_raw = sample_mean_frame(tf)
+    paths = write_failure_readout(
+        out_dir,
+        tif_path=tif_path,
+        families=families,
+        params=PACK_D,
+        seed_info=seed_info,
+        medspec=medspec,
+        n_frames=n,
+        frame_hw=(h, w),
+        source_shape=tf.series[0].shape,
+        mean_raw=mean_raw,
+        computer=computer,
+        channel=channel,
+        fingerprint=fingerprint,
+        qc=qc,
+        used_prior=used_prior,
+        reseeded=reseeded,
+        prior_branch=prior_branch,
+        ladder=ladder,
+        failure_message=message,
+    )
+    pdf = paths.get("overview_pdf")
+    return pdf if isinstance(pdf, Path) else None
 
 
 def process_stack(
@@ -80,13 +135,15 @@ def process_stack(
     skip_existing: bool = True,
     update_prior_on_success: bool = True,
     force_fresh_seed: bool = False,
+    recording_date: str | None = None,
+    write_clean: bool = True,
 ) -> ProcessResult:
     tif_path = Path(tif_path)
     out_tif = Path(out_tif) if out_tif else default_output_path(tif_path)
     out_dir = out_tif.parent
     removed_tif = removed_path_for(tif_path, out_dir)
 
-    if skip_existing and out_tif.is_file():
+    if skip_existing and write_clean and out_tif.is_file():
         return ProcessResult(
             status="skipped",
             message=f"exists: {out_dir.name}/{out_tif.name}",
@@ -95,13 +152,28 @@ def process_stack(
             removed_tif=removed_tif if removed_tif.is_file() else None,
         )
 
+    lib_hit = None
+    if not force_fresh_seed:
+        lib_hit = lookup_prior(
+            computer=computer,
+            channel=channel,
+            fingerprint=fingerprint,
+            recording_date=recording_date,
+            batch_root=batch_root,
+        )
     prior = None if force_fresh_seed else load_prior(batch_root, computer, channel)
-    use_prior = bool(
+    cache_prior_ok = bool(
         (not force_fresh_seed)
         and prior
         and prior.get("families")
         and fingerprint_compatible(prior.get("fingerprint"), fingerprint)
     )
+
+    library_families = (lib_hit or {}).get("families") or []
+    prior_branch = (lib_hit or {}).get("branch")
+    # Library A/B beat a same-root cache prior when raster matches.
+    use_library = bool(library_families) and lib_hit is not None
+    use_cache_prior = cache_prior_ok and not use_library
 
     with tifffile.TiffFile(tif_path) as tf:
         shape = tf.series[0].shape
@@ -116,48 +188,186 @@ def process_stack(
         reseeded = False
         had_usable_prior = False
 
-        if use_prior:
+        if use_library or use_cache_prior:
             medspec = sample_median_spectrum(tf)
-            families = hydrate_families(prior["families"], medspec)
-            had_usable_prior = True
-            seed_info = {
-                "mode": "soft_prior",
-                "prior_source": prior.get("source_tif"),
-                "prior_qs": [float(f["q"]) for f in prior["families"]],
-            }
+            src_fams = library_families if use_library else prior["families"]
+            if use_library:
+                src_fams = [f for f in src_fams if library_family_supported(f, medspec)]
+            if src_fams:
+                families = hydrate_families(src_fams, medspec)
+                had_usable_prior = True
+                seed_info = {
+                    "mode": "soft_prior",
+                    "prior_branch": prior_branch if use_library else "cache",
+                    "prior_source": (lib_hit or {}).get("origin")
+                    if use_library
+                    else prior.get("source_tif"),
+                    "prior_qs": [float(f["q"]) for f in src_fams],
+                }
+            else:
+                families = None
+                had_usable_prior = False
 
         if families is None:
-            try:
-                families, medspec, seed_info = detect_fringe_rich(tf)
-                seed_info["mode"] = "fresh_seed"
-            except RuntimeError as exc:
-                return ProcessResult(status="needs_review", message=str(exc))
+            families, medspec, seed_info = detect_fringe_rich(
+                tf, library_families=library_families or None
+            )
+            seed_info["mode"] = "fresh_seed"
+            if prior_branch:
+                seed_info["prior_branch"] = prior_branch
+
+        block_specs = _pop_block_specs(seed_info)
+
+        if not families:
+            ladder = ladder_inspect(
+                block_specs, medspec, library_families=library_families or None
+            )
+            seed_info["ladder"] = ladder
+            msg = "No high-confidence paired fringe family in fringe-rich scan."
+            pdf = _write_review(
+                tif_path=tif_path,
+                out_dir=out_dir,
+                tf=tf,
+                families=[],
+                seed_info=seed_info,
+                medspec=medspec,
+                computer=computer,
+                channel=channel,
+                fingerprint=fingerprint,
+                qc=msg,
+                used_prior=False,
+                reseeded=False,
+                prior_branch=prior_branch,
+                ladder=ladder,
+                message=msg,
+            )
+            return ProcessResult(
+                status="needs_review",
+                message=msg,
+                out_dir=out_dir,
+                overview_pdf=pdf,
+                prior_branch=prior_branch,
+            )
 
         trajectories, all_blocks = track_all(tf, families)
         prior_qs = (
-            [float(f["q"]) for f in prior["families"]]
-            if had_usable_prior and prior
+            [float(f["q"]) for f in (library_families if use_library else prior["families"])]
+            if had_usable_prior
             else None
         )
         ok, qc_msg = qc_tracking(families, all_blocks, prior_qs=prior_qs)
 
         if not ok and had_usable_prior:
-            # Soft prior failed — local reseed once.
             reseeded = True
-            try:
-                families, medspec, seed_info = detect_fringe_rich(tf)
-                seed_info["mode"] = "reseed_after_qc_fail"
-                seed_info["prior_qc"] = qc_msg
-                trajectories, all_blocks = track_all(tf, families)
-                ok, qc_msg = qc_tracking(families, all_blocks, prior_qs=None)
-            except RuntimeError as exc:
-                return ProcessResult(status="needs_review", message=str(exc))
+            families, medspec, seed_info = detect_fringe_rich(
+                tf, library_families=library_families or None
+            )
+            block_specs = _pop_block_specs(seed_info)
+            seed_info["mode"] = "reseed_after_qc_fail"
+            seed_info["prior_qc"] = qc_msg
+            if not families:
+                ladder = ladder_inspect(
+                    block_specs, medspec, library_families=library_families or None
+                )
+                seed_info["ladder"] = ladder
+                msg = f"QC failed then reseed empty: {qc_msg}"
+                pdf = _write_review(
+                    tif_path=tif_path,
+                    out_dir=out_dir,
+                    tf=tf,
+                    families=[],
+                    seed_info=seed_info,
+                    medspec=medspec,
+                    computer=computer,
+                    channel=channel,
+                    fingerprint=fingerprint,
+                    qc=msg,
+                    used_prior=False,
+                    reseeded=True,
+                    prior_branch=prior_branch,
+                    ladder=ladder,
+                    message=msg,
+                )
+                return ProcessResult(
+                    status="needs_review",
+                    message=msg,
+                    out_dir=out_dir,
+                    overview_pdf=pdf,
+                    reseeded=True,
+                    prior_branch=prior_branch,
+                )
+            trajectories, all_blocks = track_all(tf, families)
+            ok, qc_msg = qc_tracking(families, all_blocks, prior_qs=None)
 
         if not ok:
+            ladder = ladder_inspect(
+                block_specs or [],
+                medspec,
+                library_families=library_families or None,
+            )
+            seed_info["ladder"] = ladder
+            msg = f"QC failed: {qc_msg}"
+            pdf = _write_review(
+                tif_path=tif_path,
+                out_dir=out_dir,
+                tf=tf,
+                families=families,
+                seed_info=seed_info,
+                medspec=medspec,
+                computer=computer,
+                channel=channel,
+                fingerprint=fingerprint,
+                qc=qc_msg,
+                used_prior=had_usable_prior and not reseeded,
+                reseeded=reseeded,
+                prior_branch=prior_branch,
+                ladder=ladder,
+                message=msg,
+            )
             return ProcessResult(
                 status="needs_review",
-                message=f"QC failed: {qc_msg}",
+                message=msg,
+                out_dir=out_dir,
+                overview_pdf=pdf,
+                used_prior=had_usable_prior and not reseeded,
+                reseeded=reseeded,
                 families_q=[float(f["q"]) for f in families],
+                prior_branch=prior_branch,
+            )
+
+        if not write_clean:
+            mean_raw = sample_mean_frame(tf)
+            paths = write_failure_readout(
+                out_dir,
+                tif_path=tif_path,
+                families=families,
+                params=PACK_D,
+                seed_info=seed_info,
+                medspec=medspec,
+                n_frames=n,
+                frame_hw=(h, w),
+                source_shape=shape,
+                mean_raw=mean_raw,
+                computer=computer,
+                channel=channel,
+                fingerprint=fingerprint,
+                qc=qc_msg + " (analyze-only, not applied)",
+                used_prior=had_usable_prior and not reseeded,
+                reseeded=reseeded,
+                prior_branch=prior_branch,
+                ladder=None,
+                failure_message="analyze-only",
+            )
+            pdf = paths.get("overview_pdf")
+            return ProcessResult(
+                status="ok",
+                message=qc_msg + " (analyze-only)",
+                out_dir=out_dir,
+                overview_pdf=pdf if isinstance(pdf, Path) else None,
+                used_prior=had_usable_prior and not reseeded,
+                reseeded=reseeded,
+                families_q=[float(f["q"]) for f in families],
+                prior_branch=prior_branch,
             )
 
         if diag_dir is not None:
@@ -173,6 +383,7 @@ def process_stack(
                         "qc": qc_msg,
                         "used_prior": had_usable_prior and not reseeded,
                         "reseeded": reseeded,
+                        "prior_branch": prior_branch,
                         "families": [
                             {
                                 "q": float(f["q"]),
@@ -279,6 +490,7 @@ def process_stack(
             qc=qc_msg,
             used_prior=had_usable_prior and not reseeded,
             reseeded=reseeded,
+            prior_branch=prior_branch,
         )
 
     if update_prior_on_success and not force_fresh_seed:
@@ -291,6 +503,24 @@ def process_stack(
             source_tif=tif_path,
             notes=qc_msg,
         )
+        rec = make_record(
+            source="live_clean",
+            computer=computer,
+            channel=channel,
+            fingerprint=fingerprint,
+            families=families,
+            date_utc=recording_date,
+            origin=str(tif_path),
+            notes=qc_msg,
+        )
+        try:
+            append_local_record(batch_root, rec)
+        except OSError as exc:
+            print(f"      local library append skipped: {exc}", flush=True)
+        try:
+            append_catalog_record(rec)
+        except OSError as exc:
+            print(f"      repo catalog append skipped: {exc}", flush=True)
 
     pdf = readout_paths.get("overview_pdf") if readout_paths else None
     return ProcessResult(
@@ -303,4 +533,5 @@ def process_stack(
         used_prior=had_usable_prior and not reseeded,
         reseeded=reseeded,
         families_q=[float(f["q"]) for f in families],
+        prior_branch=prior_branch,
     )

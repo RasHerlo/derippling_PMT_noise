@@ -359,6 +359,27 @@ parameter is the bidirectional line-phase correction, which is precisely the kin
 of line-to-line timing that could shape a fringe. Even for the sandbox
 configuration, these controls differ from the data on that field.
 
+### 4.1 Why each fingerprint key exists (2026-08-28)
+
+`q` is an FFT bin in **this raster**. A prior is reusable only when the raster
+that produced that bin is the same (or we convert). Optical magnification is
+assumed **not** to change the PMT fringe (policy; no mag-swap control).
+
+| Key | Why it can change `q` / the mask | Need a new shuttered recording? |
+|---|---|---|
+| `pixelX`, `pixelY` | Bin index scales with array size. Same stripe count at 1024 vs 512 → `q` roughly doubles. | **No** for Haj Grant — already 512, same as existing DC. Conversion later if we process other sizes: `q' = q × N'/N`. |
+| `frameRate` (XML listed) | **Derived**, not a knob. ThorImage computes it from how the resonant raster is timed. In our files, 29.595 vs 15.136 is ≈2× and tracks **`scanMode`** (0 faster / 1 slower at 512 lines — i.e. two-way vs one-way packing). Other co-variates that would change the listed rate if they differed: `pixelY` (lines per frame), `flybackCycles` / `Streaming flybackLines`, possibly `fieldSize` (Y galvo travel) and `areaMode`. Do **not** treat listed rate as independent of `scanMode` at fixed `pixelY`. | A 29.6 Hz take **keeping `scanMode=1` at 512** is likely **not bookable**. To change listed rate without uni/bi: change `pixelY` (e.g. 256). The 15 vs 30 contrast is already the `scanMode` extra. |
+| `fieldSize` | Digital zoom / scan amplitude. Changes resonant turnaround and line timing; can change edge-weighting. | **No** for Haj Grant — already 178, same as DC. |
+| `pixelSizeUM`, `mag` | ThorImage-derived µm/px. Under the objective-does-not-matter assumption these are **not** PMT keys. Current code still gates on `pixelSizeUM` ±0.05, which is over-strict. | **No recording.** Fix in software: drop them from the match. Future test only if we doubt the assumption. |
+| `scanMode` | 0 ≈ unidirectional, 1 ≈ bidirectional: every other line is time-reversed. Same PMT tone → different image pattern. | **Yes** — Haj Grant is 1, existing DC is 0. |
+| `twoWayAlignment` | Pixel shift that registers reverse lines (only meaningful if `scanMode=1`). Wrong/zero alignment adds a 2-line stagger. | **Not a separate series** — set to Haj Grant’s **−12** on the same recording. |
+| `averageMode` × `averageNum` | Each saved frame is the mean of N scanner frames. XML `frameRate` stays put; **effective stack fps ≈ listed / N**. Spatial family should not change nature (usually weaker). Temporal tracking sees a slower stack. | For a **matched** Haj Grant DC, copy `1×6`. For **prediction**, add one shuttered take at **avg 1, same listed rate** so we can see weaken-vs-same-`q` without mixing in a listed-rate change. |
+| PMT gain | Amplitude, not `q`. | **No.** |
+
+**Match** means: same **raster keys** as the live trial (`pixelX/Y`, listed `frameRate`, `fieldSize`, `scanMode`, `twoWayAlignment`, averaging), same computer/PMTs, shutter closed. It does **not** mean same objective.
+
+When averaging is on, comparisons that care about time (drift, temporal confirm) should use **effective** fps = listed / N, not the XML number alone.
+
 ---
 
 ## 5. Limits of this analysis
@@ -383,30 +404,66 @@ configuration, these controls differ from the data on that field.
 
 ## 6. What to record next
 
-Highest value first, given the aim of a pipeline that runs the same way every
-time:
+**Definition (2026-08-28):** DarkCurrent = shutter fully closed, no light, no
+sample. Do not book light-on, Pockels, mag-swap, or gain series unless we
+re-open those questions.
 
-1. **Controls at the configurations actually used for data**, especially the Haj
-   Grant style (16X, 15.136 Hz, 1.623 µm, `scanMode=1`, `averageMode=1×6`,
-   gain 40). Without this the calibration cannot help the case that failed.
-2. **Match `twoWayAlignment` to the experimental value** rather than 0, so the
-   control shares the line-phase behaviour of real recordings.
-3. **A genuine laser-blanked control** (shutter closed) *paired* with a light-on
-   control at the same settings, since §3.4 shows these measure different things.
-   Label the pair unambiguously.
-4. **A finer Pockels series**, 6–8 levels from 0 to 300, to resolve the
-   non-monotonic response in §3.4 and settle whether 150 sits on a transmission
-   null or whether that trial simply had a blocked path. Record the level in the
-   folder name as before — the XML does not capture it.
-5. **A gain series** (e.g. 40 / 50 / 60) at one configuration, to confirm gain
-   changes amplitude but not `q` — which is the assumption behind excluding gain
-   from the calibration key.
-6. **Longer or repeated recordings** if drift across a whole session matters;
-   1600 frames (~54 s) shows a 2-step `q` staircase, so a several-minute
-   recording would bound the drift range far better.
+**Standing policy:** at the start of each experimental day, record a shuttered
+DC at the **same raster** that the day’s live stacks will use. Best prior
+(branch A). Cheap, and it tracks hardware drift across days.
 
-A repeat of the same configuration on a later date would also start the time
-series the registry is built for.
+### 6.1 Unblock Haj Grant ChanA — one recording
+
+Existing DC cannot inform it (`frameRate` and `scanMode` differ, §4.1).
+ChanA+ChanB, ~1600 **saved** frames, Shinano, copy Haj Grant `<LSM>`:
+
+```text
+pixelX=512  pixelY=512  fieldSize=178
+frameRate=15.136          ← listed / scanner rate
+scanMode=1
+twoWayAlignment=-12
+averageMode=1  averageNum=6   ← effective stack fps ≈ 15.136/6
+dwellTime=0.08  flybackCycles=12
+```
+
+Objective: whatever is on the scope. Folder e.g. `PC000_shutter`.
+
+If a paired ChanA family shows up, that `q` is verified on the live stack. If
+the stack is quiet, shuttered DC cannot seed live data (see §3.4) and ChanA is
+solved with the seed ladder on the live recording.
+
+### 6.2 Additions so we can *predict* when settings change a bit
+
+Not a full factorial. Freeze §6.1 as baseline; change **one** raster knob per
+take (still shuttered, 512, fieldSize 178 unless that *is* the knob):
+
+| Extra take | Knob | What we learn |
+|---|---|---|
+| 1 | `pixelY` 256 (or 1024), keep `scanMode=1` and listed-rate-as-computed | How `q` and listed fps scale with **lines / area**, not with uni/bi. Skip if we will never use those sizes. |
+| 2 | `averageNum=1`, **same listed 15.136**, `scanMode=1` | Averaging weakens vs same spatial family (listed rate must stay put) |
+| 3 | `scanMode=0`, keep 512 / fieldSize 178 / avg 1×6; `twoWayAlignment=0` | Uni vs bidirectional packing — this **is** the 15 Hz vs 30 Hz contrast on this rig |
+
+Do **not** book “listed 29.595 with `scanMode=1` at 512”: those two XML numbers co-vary. `dwellTime`, `flyback*`, `fieldSize` are already matched across Haj Grant and old DC (not the cause of 15 vs 30).
+
+Add a `fieldSize` take or 256/1024 **only if** those settings actually appear
+in upcoming experiments. Still no mag / gain / light-on.
+
+### 6.3 Three prior branches (accumulate in this repo)
+
+| Branch | Source | Trust | Use |
+|---|---|---|---|
+| **A** | DC same day, exact raster match | Highest | Verify known families on the live stack; do not copy amplitude |
+| **B** | Older DC, raster match “close enough” (same keys as §4.1, any date) | Qualified guess | Extra seed candidates; must still pass on **this** stack |
+| **C** | Successful cleans of similar live experiments (Computer × raster × channel) | Weakest | Same: guess `q`, confirm locally |
+
+Yes, this repo can learn over time: commit a **library** of
+`{date, computer, raster fingerprint, channel, families q/fx}` from DC
+(`darkcurrent/registry.json` + measurements) and from successful cleans (a
+catalog file — **not** the per-folder `.defringe_cache/`, which does not
+travel). After §6.2 exists, that table is what a converter (e.g. `q` vs listed
+rate, vs N) would be fitted on. No model until those points exist.
+
+Older shopping list (light-on pair, Pockels, gain, mag) stays **deferred**.
 
 ---
 
@@ -516,8 +573,9 @@ comb rather than a true-versus-false pair.
 - Selecting an `fx` support and measuring its excess on the same spectrum
   inflates everything, including any null built that way. Split the frames.
 
-**New recordings would unblock:** items in §6, most importantly a control at the
-Haj Grant configuration.
+**New recordings would unblock:** the single shuttered raster copy in §6
+(Haj Grant `frameRate` + `scanMode=1` + `twoWayAlignment=-12` + `average 1×6`).
+Not a mag, gain, or light-on series.
 
 **Artifacts.** `darkcurrent/registry.json` (acquisition census),
 `darkcurrent/measurements.json` (run history, appended per run), and figures

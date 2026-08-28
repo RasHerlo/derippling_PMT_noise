@@ -228,12 +228,20 @@ def family_score(logamp, q, paired, xvalid):
     return float(np.median(scores))
 
 
-def search_q(logamp, q0, paired, xvalid, radius):
+def search_q(logamp, q0, paired, xvalid, radius, forbidden_qs=None, forbidden_radius=3):
     cy = logamp.shape[0]//2
     lo = max(5, int(round(q0))-radius)
     hi = min(cy-5, int(round(q0))+radius)
     qs = np.arange(lo, hi+1)
+    if len(qs) == 0:
+        return float(q0), float("-inf")
     scores = np.array([family_score(logamp, int(q), paired, xvalid) for q in qs])
+    if forbidden_qs:
+        for i, q in enumerate(qs):
+            if any(abs(int(q) - int(fq)) < int(forbidden_radius) for fq in forbidden_qs):
+                scores[i] = -np.inf
+        if not np.isfinite(scores).any():
+            return float(q0), float("-inf")
     j = int(np.argmax(scores))
     return float(qs[j]), float(scores[j])
 

@@ -28,32 +28,34 @@ class StackJob:
     computer: str
     fingerprint: dict
     missing_xml: bool
+    date_utc: str | None = None
 
     @property
     def rel_id(self) -> str:
         return str(self.tif_path)
 
 
-def _find_experiment_xml(data_dir: Path, root: Path) -> Path | None:
-    """Prefer Experiment.xml in or beside DATA; else walk parents up to root."""
-    root = root.resolve()
-    folder = data_dir.resolve()
-    while True:
+def find_experiment_xml(start: Path, stop: Path | None = None, *, max_up: int = 8) -> Path | None:
+    """Walk parents from start looking for Experiment.xml."""
+    folder = Path(start).resolve()
+    stop_res = Path(stop).resolve() if stop is not None else None
+    for _ in range(max_up):
         for name in ("Experiment.xml", "experiment.xml"):
             cand = folder / name
             if cand.is_file():
                 return cand
-        if folder == root:
+        if stop_res is not None and folder == stop_res:
             break
         parent = folder.parent
         if parent == folder:
             break
-        try:
-            parent.relative_to(root)
-        except ValueError:
-            break
         folder = parent
     return None
+
+
+def _find_experiment_xml(data_dir: Path, root: Path) -> Path | None:
+    """Prefer Experiment.xml in or beside DATA; else walk parents up to root."""
+    return find_experiment_xml(data_dir, stop=root)
 
 
 def _iter_data_dirs(root: Path):
@@ -79,12 +81,14 @@ def discover_stacks(root: Path) -> list[StackJob]:
         computer = NO_XML_COMPUTER
         fingerprint: dict = {}
         missing_xml = xml_path is None
+        date_utc = None
 
         if xml_path is not None:
             try:
                 meta = parse_experiment_xml(xml_path)
                 computer = meta["computer"]
                 fingerprint = meta["fingerprint"]
+                date_utc = meta.get("date_utc")
                 missing_xml = False
             except Exception as exc:  # noqa: BLE001
                 print(f"  [warn] bad Experiment.xml ({xml_path}): {exc}")
@@ -112,10 +116,53 @@ def discover_stacks(root: Path) -> list[StackJob]:
                     computer=computer,
                     fingerprint=fingerprint,
                     missing_xml=missing_xml,
+                    date_utc=date_utc,
                 )
             )
 
     return jobs
+
+
+def job_for_stack(tif_path: Path, root: Path | None = None) -> StackJob:
+    """Build a StackJob for one TIFF (single-stack CLI). Walks up for Experiment.xml."""
+    tif_path = Path(tif_path).resolve()
+    channel = STACK_BASENAMES.get(tif_path.name)
+    if channel is None:
+        parent_name = tif_path.parent.name
+        channel = parent_name if parent_name in ("ChanA", "ChanB") else "ChanA"
+    if tif_path.parent.name in ("ChanA", "ChanB"):
+        data_dir = tif_path.parent.parent
+    else:
+        data_dir = tif_path.parent
+    trial_dir = data_dir.parent if data_dir.name.upper() == "DATA" else data_dir
+    xml_path = find_experiment_xml(tif_path.parent, stop=root)
+    computer = NO_XML_COMPUTER
+    fingerprint: dict = {}
+    missing_xml = xml_path is None
+    date_utc = None
+    if xml_path is not None:
+        try:
+            meta = parse_experiment_xml(xml_path)
+            computer = meta["computer"]
+            fingerprint = meta["fingerprint"]
+            date_utc = meta.get("date_utc")
+            missing_xml = False
+        except Exception as exc:  # noqa: BLE001
+            print(f"  [warn] bad Experiment.xml ({xml_path}): {exc}")
+            xml_path = None
+            missing_xml = True
+            computer = NO_XML_COMPUTER
+    return StackJob(
+        tif_path=tif_path,
+        channel=channel,
+        data_dir=data_dir,
+        trial_dir=trial_dir,
+        xml_path=xml_path,
+        computer=computer,
+        fingerprint=fingerprint,
+        missing_xml=missing_xml,
+        date_utc=date_utc,
+    )
 
 
 # Back-compat alias used by older call sites / docs.
