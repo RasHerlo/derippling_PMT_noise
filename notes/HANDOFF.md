@@ -1,73 +1,134 @@
-# Pickup — 2026-08-28 evening
+# Pickup — 2026-08-30
 
-Continue here next session (Sat/Sun). Do **not** re-run full-stack Haj Grant
-cleans until the shutter-seed path is wired in; ChanB’s existing clean is fine.
+Continue here. **First implementation: the recursive image-domain check.**
+Do **not** start the FOV x-scan until that loop is in and reviewed. Do **not**
+re-run a production Haj Grant ChanA clean until the check exists.
+
+Haj Grant ChanB’s existing `defringe_v22` clean is still fine. SUPPORT / suite2p
+handoffs unchanged; do not touch `DATA\SUPPORT_*`.
 
 ## Where we are
 
-Haj Grant Example (`F:\bPACNewData2026\Haj Grant Example`):
+Protocol slot is still `raw → v2.2 pack_D → SUPPORT retrain → suite2p`.
+v2.2 worked on the Level3b sandbox; Haj Grant ChanA did not seed. That is a
+coverage / seed problem, not a reason to treat one stack’s quiet frames as the
+definition of the fringe.
 
-| Channel | Production `defringe_v22` | Why |
+| Channel (Haj Grant Example) | Production `defringe_v22` | Why |
 |---|---|---|
-| ChanB | **ok**, q≈81 | Library/live prior; overview now has original\|cleaned\|removed inspection pages |
-| ChanA | **needs_review** | Stack-wide seed never found a safe pair; **do not** treat the z-ladder trial-clean as a real subtract |
+| ChanB | **ok**, q≈81 | Branch C live_clean in the catalog; tracking held |
+| ChanA | **needs_review** | No catalog hit at this raster with fx support; safe paired seed empty. Do **not** apply the z-ladder trial-clean |
 
-The useful signal is an **in-stack shutter stretch**: frames **756–760** (761 is
-already opening). Auto-detected as the only low-std run on both channels.
-Mean barely drops; **std collapses** (ChanA ~220→26, ChanB ~115→32). Those
-frames *are* the PMT pattern (no biology).
+On this Haj Grant stack, frames **756–760** are a mid-experiment shutter
+(low-std run; 761 is opening). They are a **same-file quiet window**: no
+biology, PMT pattern visible. From those frames we saw ChanA **q≈10** and
+ChanB **q≈81** (ChanB matches the successful clean). That is **one
+configuration at one moment**, not an inventory of every family later in the
+stack. Do not call those frames “the fringe.”
 
-Learned from that stretch (not from 50-frame live blocks):
+## Catalog (landed 2026-08-30)
 
-- ChanA: **q≈10** (harmonic 30), fx comb ~13–69
-- ChanB: **q≈81** (harmonic 162), fx comb ~11–62 — same family the successful clean already used
+One seed file: `fringe_library/catalog.json`. `darkcurrent/` stays lab notes
+and is not consulted for seeding.
 
-Live transfer with that comb + q-track ±8:
+| `source` | Branch | Default `complete` |
+|---|---|---|
+| `darkcurrent` | A same day, else B | true |
+| `in_stack_shutter` | same A/B split | **false** (set `frames`) |
+| `live_clean` | C | true |
 
-- ChanA **1061**: q 10→12, gate on, **removed looks like shutter fringes, not cells**
-- ChanB **160**: q 81→89, same
-- Several live frames stay gate=0 (ridge weak under cells) — conservative, not a seed failure
-- ChanA shutter flatten is **incomplete** (ghost bands; std 28→14). ChanB shutter flatten is close to grain (std 33→15)
+Within a branch, complete wins, then newest date. Amplitude is never copied.
+Library `q` must still show `fx` support on **this** stack.
 
-Phase-locking / subtracting the shutter *image* is still the wrong model.
-Amplitude notch + short q-track is the right class. Failure was seeding from
-the wrong frames and evaluating detector z-ladders instead of “make 756–760
-flat, then check live *removed* vs that pattern.”
+Every run’s `overview.pdf` (ok and `needs_review`) prints a catalog line;
+`families.json` / `eval.json` store the same block. Rebuild:
+`python -m batch_defringe --rebuild-overview "<channel>\defringe_v22"`.
 
-The old ChanA eval (q=109, z=4.5–3.0) was a red herring: at z=4.5–3.5
-removed rms on 760 was **0**. Frame 760 looked “successfully cleaned” because
-it *is* the pattern, not because we subtracted it.
+No in-stack shutter rows are in the catalog yet (schema only). Haj Grant
+ChanB `q=81` is the only live_clean. Existing DC rows are Shinano 29.595 Hz /
+`scanMode=0` and **do not** match Haj Grant.
 
-## Artifacts to inspect (not in git)
+## Seed (agreed — do not re-litigate)
+
+A seed is a **hint** (look near this `q` / `fx` first), not ground truth.
+Locking one pair does **not** guarantee all fringe is caught, and does **not**
+guarantee everything inside that pair is non-biology.
+
+What currently limits biology: narrow mask, gate=0 when the ridge is weak,
+paired high-z cut, `needs_review` instead of a guess. What is still missing:
+an image-domain stop/accept rule on **`removed`**.
+
+Without a seed the code already searches 50-frame blocks for recurrent paired
+ridges. That is not “the most likely structure in the FOV”; on a live frame
+the strongest FFT peak is often cells.
+
+## Implement tomorrow — 1) recursive check (do this first)
+
+Propose (FFT / catalog / shutter hint) → notch only that candidate → judge
+**`removed` in image domain** → look at leftover raw → repeat or stop.
+
+Score **traits**, not a template (no fixed period, no shutter-image match):
+
+- `removed` covers most of the FOV (or the region under test)
+- left–right even; biology is local, fringe is a field pattern
+- many parallel ridges with locally similar spacing (spacing may change
+  across x; it must not look like somata)
+- not blob-like
+
+Accept if those hold. Reject if `removed` is patchy, one-sided, or cell-shaped
+— even if FFT liked the peak. Then, if leftover raw still shows a grating,
+propose another candidate; if the next `removed` fails the image test, **stop**.
+
+Write the verdict on the overview (next to the catalog line). Do not promote a
+clean that fails this check.
+
+## Implement later — 2) x-scan, no tiles
+
+One global `q` is why the mid-FOV wide bands come off and the finer edge
+lines stay: period changes along the resonant (x) axis; amplitude is also
+edge-heavy. After the recursive check works, walk **x** only to **propose**
+local period/strength. Apply one global or **smoothly weighted** notch.
+
+**Do not** clean independent tiles (SUPPORT-style seams). Overlapping
+windows, never abutting patches. The scan must not become a second spatial
+denoiser.
+
+## Cautions
+
+- In-stack shutter = branch A **geometry for families those frames show**,
+  flagged incomplete. Rank: dedicated same-day DC (complete A) beats shutter;
+  shutter beats live_clean (C). Still scan/track the rest of the stack.
+- Do not wire shutter detection into `process_stack` as a hard seed until the
+  image-domain check can veto a bad transfer.
+- A quiet true DarkCurrent may have no usable ridge; then it must not force a
+  seed.
+- Every `ok` currently appends branch C. A bad success pollutes the next seed.
+  The image-domain check is meant to be the gate before catalog write.
+- Inspect-only z-ladder can make a shutter frame look “cleaned” because that
+  frame *is* the pattern (Haj Grant 760 at z=4.5–3.5, removed RMS 0). Do not
+  promote ladder trials.
+- Phase-lock / subtract the shutter *image* is the wrong model. Amplitude
+  notch + short q-track stays the filter class.
+- Do not flatten Haj Grant 756–760 as the definition of success. Flattening
+  those frames is only a probe that a candidate can remove the quiet-window
+  pattern; live `removed` must still pass the image-domain traits.
+
+## Haj Grant probe artifacts (not in git)
 
 ```
 F:\bPACNewData2026\Haj Grant Example\DATA\ChanA\defringe_v22\overview.pdf
 F:\bPACNewData2026\Haj Grant Example\DATA\ChanA\defringe_v22\shutter_seed_test\overview.pdf
-F:\bPACNewData2026\Haj Grant Example\DATA\ChanB\defringe_v22\overview.pdf          (inspection pages rebuilt)
+F:\bPACNewData2026\Haj Grant Example\DATA\ChanB\defringe_v22\overview.pdf
 F:\bPACNewData2026\Haj Grant Example\DATA\ChanB\defringe_v22\shutter_seed_test\overview.pdf
 ```
 
-Probe command (does not overwrite production TIFFs):
+`python -m batch_defringe.shutter_seed_test` — probe only; does not overwrite
+production TIFFs.
 
-`python -m batch_defringe.shutter_seed_test`
+## Code landed this session (not yet the recursive loop)
 
-Rebuild a success PDF only:
-
-`python -m batch_defringe --rebuild-overview "<channel>\defringe_v22"`
-
-## Code landed (this commit)
-
-- `batch_defringe/eval_report.py` — needs_review original\|trial-cleaned\|removed + z-ladder
-- Success `overview.pdf` — same inspection at anchors 160/1061 + strongest/weakest removal
-- `batch_defringe/shutter_seed_test.py` — shutter-seed probe
-- Library: Haj Grant ChanB live_clean q=81 (branch C) in `fringe_library/catalog.json`
-
-## Pick up here
-
-1. Finish ChanA shutter **756–760 to spatially flat** with the **smallest extra fx peaks** (not a wider row). Ghost diagonal remains.
-2. On live frames where the tracked ridge **gates on**, use the same flatten depth as the shutter (pack_D leftover is milder than shutter flatten).
-3. Wire in-stack shutter detection into `process_stack` (low-std run → seed q/fx comb → tight q-track). Dialog to confirm/mark ranges can wait until auto-detect is trusted.
-4. New eval metric: (a) shutter std after flatten; (b) live *removed* must resemble the shutter pattern; (c) do **not** score “dominant stripes on frame 160” as the fringe when FFT says q=0 biology.
-5. Only then re-run Haj Grant ChanA for a real cleaned TIFF.
-
-SUPPORT / suite2p handoffs unchanged; do not touch `DATA\SUPPORT_*`.
+- `batch_defringe/library.py` — `in_stack_shutter`, `complete`, `frames`;
+  complete-before-incomplete lookup; `catalog_status` / `format_catalog_line`
+- Overview + `families.json` / `eval.json` show catalog use
+- Tests in `tests/test_batch_defringe.py`
+- Spec: `notes/DARKCURRENT.md` §6.3

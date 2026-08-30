@@ -17,6 +17,7 @@ if str(_GPT) not in sys.path:
 from pmt_fringe_raw_adaptive import family_score, fft_log_amp, search_q  # noqa: E402
 from pmt_fringe_raw_adaptive_v22 import clean_frame_v22  # noqa: E402
 
+from .library import format_catalog_line
 from .readout import (
     FRAMES_PER_PAGE,
     _jsonable,
@@ -137,15 +138,17 @@ def _draw_cover(
     title: str,
     subtitle: str,
     message: str,
+    catalog: dict | None = None,
 ) -> None:
     from matplotlib.gridspec import GridSpec
 
     fig.clear()
     fig.patch.set_facecolor("white")
-    gs = GridSpec(2, 2, figure=fig, left=0.06, right=0.98, top=0.84, bottom=0.08, hspace=0.32, wspace=0.22)
+    gs = GridSpec(2, 2, figure=fig, left=0.06, right=0.98, top=0.82, bottom=0.08, hspace=0.32, wspace=0.22)
     fig.text(0.06, 0.97, title, fontsize=13, fontweight="bold", va="top")
     fig.text(0.06, 0.935, subtitle, fontsize=8.5, va="top", color="0.25")
-    fig.text(0.06, 0.90, message, fontsize=8, va="top", color="0.35")
+    fig.text(0.06, 0.905, format_catalog_line(catalog), fontsize=8, va="top", color="0.2")
+    fig.text(0.06, 0.875, message, fontsize=8, va="top", color="0.35")
 
     ax0 = fig.add_subplot(gs[0, 0])
     vmin, vmax = _percentile_limits(mean_raw)
@@ -211,6 +214,7 @@ def write_eval_report(
     channel: str,
     message: str,
     anchors: tuple[int, ...] = EVAL_ANCHOR_FRAMES,
+    catalog: dict | None = None,
 ) -> dict[str, Path | None]:
     """Multi-page trial-clean PDF. Does not write a full-stack cleaned TIFF."""
     import matplotlib.pyplot as plt
@@ -250,6 +254,7 @@ def write_eval_report(
             title=f"v2.2 trial-clean evaluation — NEEDS REVIEW — {channel}",
             subtitle=f"{tif_path.name}  ·  {computer} / {channel}  ·  stack not overwritten",
             message=message,
+            catalog=catalog,
         )
         fig.savefig(png_path, dpi=130)
         pdf.savefig(fig, dpi=140)
@@ -335,6 +340,7 @@ def write_eval_report(
             _jsonable(
                 {
                     "message": message,
+                    "catalog": catalog,
                     "scoring_rung": None if scoring_rung is None else scoring_rung["name"],
                     "example_frames": chosen,
                     "score_trace": trace,

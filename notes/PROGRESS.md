@@ -1,11 +1,25 @@
+# Progress handoff — 2026-08-30
+
+Pickup: **`notes/HANDOFF.md`**.
+
+Landed: one seed catalog (`darkcurrent` / `in_stack_shutter` / `live_clean`,
+`complete` + shutter `frames`); catalog line on every overview. `darkcurrent/`
+stays lab notes.
+
+Next (in order): (1) recursive propose → notch → judge `removed` in image
+domain → leftover; (2) later, x-walk as a proposer only — no tile cleans.
+Do not promote Haj Grant ChanA until (1) exists. Do not call Haj Grant
+756–760 “the fringe”: they are a same-file quiet window showing one
+configuration (q≈10 / q≈81).
+
+---
+
 # Progress handoff — 2026-08-28 evening (shutter-seed)
 
-Pickup: **`notes/HANDOFF.md`**. Haj Grant ChanA is still `needs_review`.
-In-stack shutter frames **756–760** are the real ChanA/ChanB fringe (q≈10 /
-q≈81). Probe PDFs under each channel’s `defringe_v22/shutter_seed_test/`.
-Next: flatten those five ChanA frames fully with a peaked fx comb, then use
-that comb + short q-track on live frames; do not re-seed ChanA from the
-z-ladder.
+Pickup was `notes/HANDOFF.md` (now superseded by 2026-08-30). Haj Grant ChanA
+is still `needs_review`. Frames **756–760** are a shutter quiet window on that
+stack (ChanA q≈10, ChanB q≈81), **not** an inventory of the whole experiment.
+Probe PDFs under each channel’s `defringe_v22/shutter_seed_test/`.
 
 ---
 
@@ -51,11 +65,10 @@ XMLs 15.136 vs 29.595 **co-varies with `scanMode`** (≈2×; see
 **Session DC (policy):** every experimental day and setting should start with
 a shuttered DC at **that** raster. That is the best prior (branch A).
 
-**Three prior branches (design, not code):** A = same-day exact DC; B =
-older DC with a sufficient raster match (qualified guess); C = priors from
-successful cleans of similar live experiments. Repo can accumulate this as a
-committed fingerprint→families library (`darkcurrent/` + a live-prior
-catalog). Per-dataset `.defringe_cache/` is not that library.
+**Three prior branches (one catalog):** A = same-day DC or in-stack shutter;
+B = older DC or older shutter; C = successful live cleans. All in
+`fringe_library/catalog.json` (`source`, `complete`, shutter `frames`).
+`darkcurrent/` stays lab notes. `.defringe_cache/` is not that library.
 
 **Booking — prediction extras (beyond one Haj raster DC):** from that
 baseline, one shuttered take each: listed ~30 Hz; avg 1 at the **same** listed

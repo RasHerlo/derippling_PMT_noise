@@ -398,5 +398,5 @@
       "computer_safe": "THORLABS_30_016"
     }
   ],
-  "note": "Geometry-only fringe library. A=same-day DC, B=older DC, C=live_clean. Amplitude is never copied."
+  "note": "Single seed catalog (geometry only). source=darkcurrent|in_stack_shutter|live_clean. A=same-day DC or in-stack shutter, B=older DC or older shutter, C=live_clean. Within a branch, complete=true beats incomplete. in_stack_shutter defaults complete=false and should set frames. Amplitude is never copied. Characterize numbers stay in darkcurrent/, not here."
 }

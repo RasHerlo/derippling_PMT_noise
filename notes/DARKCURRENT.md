@@ -448,20 +448,26 @@ Do **not** book “listed 29.595 with `scanMode=1` at 512”: those two XML numb
 Add a `fieldSize` take or 256/1024 **only if** those settings actually appear
 in upcoming experiments. Still no mag / gain / light-on.
 
-### 6.3 Three prior branches (accumulate in this repo)
+### 6.3 Three prior branches (one seed catalog)
 
-| Branch | Source | Trust | Use |
+Seed geometry lives in **`fringe_library/catalog.json`** only (`source` +
+`complete` + optional `frames`). `darkcurrent/registry.json` and
+`measurements.json` stay as lab notes; they are not a second seed store.
+`.defringe_cache/` is the local append log, not the committed library.
+
+| Branch | `source` | Trust | Use |
 |---|---|---|---|
-| **A** | DC same day, exact raster match | Highest | Verify known families on the live stack; do not copy amplitude |
-| **B** | Older DC, raster match “close enough” (same keys as §4.1, any date) | Qualified guess | Extra seed candidates; must still pass on **this** stack |
-| **C** | Successful cleans of similar live experiments (Computer × raster × channel) | Weakest | Same: guess `q`, confirm locally |
+| **A** | `darkcurrent` same day, or `in_stack_shutter` same day | Highest | Verify known families on the live stack; do not copy amplitude |
+| **B** | Older `darkcurrent` or older `in_stack_shutter`, raster match | Qualified guess | Extra seed candidates; must still pass on **this** stack |
+| **C** | `live_clean` of similar live experiments (Computer × raster × channel) | Weakest | Same: guess `q`, confirm locally |
 
-Yes, this repo can learn over time: commit a **library** of
-`{date, computer, raster fingerprint, channel, families q/fx}` from DC
-(`darkcurrent/registry.json` + measurements) and from successful cleans (a
-catalog file — **not** the per-folder `.defringe_cache/`, which does not
-travel). After §6.2 exists, that table is what a converter (e.g. `q` vs listed
-rate, vs N) would be fitted on. No model until those points exist.
+Within a branch, `complete=true` (dedicated DC / live clean) beats
+`complete=false`. In-stack shutter **defaults incomplete**: A-geometry for the
+families those frames show, not an inventory of the whole stack. Record
+`frames` (0-based TIFF indices) on shutter rows.
+
+After §6.2 exists, this table is what a converter (e.g. `q` vs listed rate,
+vs N) would be fitted on. No model until those points exist.
 
 Older shopping list (light-on pair, Pockels, gain, mag) stays **deferred**.
 

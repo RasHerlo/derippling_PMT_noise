@@ -7,7 +7,7 @@ This file + `optimization_manifest.json` are the handoff surface for that repo.
 **Repo:** https://github.com/RasHerlo/derippling_PMT_noise  
 **Sandbox data:** `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`  
 **Machine-readable twin:** [`optimization_manifest.json`](optimization_manifest.json)  
-**Last updated:** 2026-08-28 evening (shutter-seed probe)
+**Last updated:** 2026-08-30 (catalog + image-domain plan)
 
 ---
 
@@ -94,5 +94,7 @@ defringe_runs/v22_full_seeded500/
 2. SUPPORT retrain on `defringed_v22`  
 3. suite2p MC bakeoff on v22 (± SUPPORT after retrain)  
 4. Optional: harden full-stack detection (drop 500fr seed requirement)  
-5. **Implemented 2026-08-28 (`batch_defringe` v0.4.0):** assume `mag`/`pixelSizeUM` do not affect PMT fringes (dropped from prior key). Library A/B/C in `fringe_library/catalog.json`. Failure PDF + inspect-only ladder. Recurrent seeds, track identity lock. Single TIFF = `process_stack`. Still need a **shuttered DC** at Haj Grant raster (`notes/DARKCURRENT.md` §6) before ChanA can be library-seeded.  
-6. **2026-08-28 evening:** in-stack shutter 756–760 on Haj Grant is a same-file DC. ChanB q≈81 already matched it; ChanA seed is q≈10, not the z-ladder q=109. Pickup `notes/HANDOFF.md`. Do not promote ChanA until shutter flatten is spatially flat and live *removed* matches that pattern.  
+5. **Implemented 2026-08-28 (`batch_defringe` v0.4.0):** assume `mag`/`pixelSizeUM` do not affect PMT fringes (dropped from prior key). Library A/B/C in `fringe_library/catalog.json`. Failure PDF + inspect-only ladder. Recurrent seeds, track identity lock. Single TIFF = `process_stack`.  
+6. **2026-08-28 evening:** Haj Grant frames 756–760 are a same-file shutter quiet window (ChanA q≈10, ChanB q≈81). Not an inventory of the stack. Pickup `notes/HANDOFF.md`.  
+7. **Implemented 2026-08-30:** one seed catalog (`darkcurrent` / `in_stack_shutter` incomplete+`frames` / `live_clean`). Overview + `families.json` show catalog use. `darkcurrent/` not used for seeding.  
+8. **Next implement:** recursive image-domain check on `removed` (FOV-wide / even / not blob), then later an x-walk proposer with **no tile cleans**. Do not promote Haj Grant ChanA until the check exists. Details and cautions: `notes/HANDOFF.md`.  

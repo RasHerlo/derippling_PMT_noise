@@ -1,10 +1,18 @@
-"""Committed fringe-family library (prior branches A / B / C).
+"""Single seed catalog for DarkCurrent, in-stack shutter, and live cleans.
 
-Branch A: DarkCurrent, same calendar day, raster match.
-Branch B: older DarkCurrent, raster match.
-Branch C: successful live cleans, raster match.
+One file (``fringe_library/catalog.json``) holds geometry only. Characterize
+numbers stay in ``darkcurrent/`` and are not a second seed store.
 
-Amplitude is never copied — only q / pair / fx geometry, verified on the live stack.
+Sources and branches (same raster + computer + channel required):
+
+- ``darkcurrent`` — A if same calendar day, else B. ``complete`` defaults True.
+- ``in_stack_shutter`` — same A/B split (same-file quiet frames). ``complete``
+  defaults False; ``frames`` lists the 0-based TIFF indices. A-geometry for
+  families it shows; not an inventory of the whole stack.
+- ``live_clean`` — branch C. ``complete`` defaults True.
+
+Within a branch, a complete record beats an incomplete one; then newest date.
+Amplitude is never copied — only q / pair / fx, verified on the live stack.
 """
 
 from __future__ import annotations
@@ -128,13 +136,20 @@ def classify_record(
     if not fingerprint_compatible(rec.get("fingerprint"), fingerprint):
         return None
     source = str(rec.get("source") or "")
-    if source == "darkcurrent":
+    if source in ("darkcurrent", "in_stack_shutter"):
         if same_calendar_day(rec.get("date_utc"), recording_date):
             return "A"
         return "B"
     if source == "live_clean":
         return "C"
     return "C"
+
+
+def record_complete(rec: dict[str, Any]) -> bool:
+    """Dedicated DC / live clean default complete; in-stack shutter defaults not."""
+    if rec.get("complete") is not None:
+        return bool(rec["complete"])
+    return str(rec.get("source") or "") != "in_stack_shutter"
 
 
 _BRANCH_RANK = {"A": 0, "B": 1, "C": 2}
@@ -149,14 +164,14 @@ def lookup_prior(
     batch_root: Path | None = None,
     catalog: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Best library hit: A then B then C; newest date wins within a branch."""
+    """Best library hit: A then B then C; complete before incomplete; then newest."""
     records: list[dict[str, Any]] = []
     cat = catalog if catalog is not None else load_catalog()
     records.extend(cat.get("records") or [])
     if batch_root is not None:
         records.extend(load_local_records(batch_root))
 
-    best: tuple[int, str, str, dict[str, Any]] | None = None
+    best: tuple[int, int, str, str, dict[str, Any]] | None = None
     for rec in records:
         branch = classify_record(
             rec,
@@ -168,12 +183,18 @@ def lookup_prior(
         if branch is None:
             continue
         rank = _BRANCH_RANK[branch]
+        incomplete = 0 if record_complete(rec) else 1
         date = rec.get("date_utc") or ""
-        if best is None or rank < best[0] or (rank == best[0] and date > best[1]):
-            best = (rank, date, branch, rec)
+        if (
+            best is None
+            or rank < best[0]
+            or (rank == best[0] and incomplete < best[1])
+            or (rank == best[0] and incomplete == best[1] and date > best[2])
+        ):
+            best = (rank, incomplete, date, branch, rec)
     if best is None:
         return None
-    _rank, _date, branch, winner = best
+    _rank, _inc, _date, branch, winner = best
     return {
         "branch": branch,
         "record": winner,
@@ -181,7 +202,108 @@ def lookup_prior(
         "source": winner.get("source"),
         "date_utc": winner.get("date_utc"),
         "origin": winner.get("origin"),
+        "complete": record_complete(winner),
+        "frames": winner.get("frames"),
     }
+
+
+def catalog_status(
+    lib_hit: dict[str, Any] | None,
+    *,
+    used: bool = False,
+    reseeded: bool = False,
+    cache_used: bool = False,
+    supported_qs: list[float] | None = None,
+    rejected_qs: list[float] | None = None,
+) -> dict[str, Any]:
+    """What the catalog contributed to this run (for overview + families.json)."""
+    if cache_used and not (lib_hit and used):
+        return {
+            "hit": False,
+            "branch": "cache",
+            "source": "cache",
+            "complete": None,
+            "frames": None,
+            "origin": None,
+            "date_utc": None,
+            "catalog_qs": [],
+            "used": True,
+            "reseeded": bool(reseeded),
+            "supported_qs": list(supported_qs or []),
+            "rejected_qs": list(rejected_qs or []),
+            "role": "reseeded" if reseeded else "used",
+        }
+    if not lib_hit:
+        return {
+            "hit": False,
+            "branch": None,
+            "source": None,
+            "complete": None,
+            "frames": None,
+            "origin": None,
+            "date_utc": None,
+            "catalog_qs": [],
+            "used": False,
+            "reseeded": False,
+            "supported_qs": [],
+            "rejected_qs": [],
+            "role": "none",
+        }
+    qs = [float(f["q"]) for f in (lib_hit.get("families") or [])]
+    if reseeded:
+        role = "reseeded"
+    elif used:
+        role = "used"
+    else:
+        role = "considered"
+    return {
+        "hit": True,
+        "branch": lib_hit.get("branch"),
+        "source": lib_hit.get("source"),
+        "complete": lib_hit.get("complete"),
+        "frames": lib_hit.get("frames"),
+        "origin": lib_hit.get("origin"),
+        "date_utc": lib_hit.get("date_utc"),
+        "catalog_qs": qs,
+        "used": bool(used),
+        "reseeded": bool(reseeded),
+        "supported_qs": list(supported_qs if supported_qs is not None else qs),
+        "rejected_qs": list(rejected_qs or []),
+        "role": role,
+    }
+
+
+def format_catalog_line(info: dict[str, Any] | None) -> str:
+    """One-line catalog summary for the overview PDF."""
+    if not info:
+        return "catalog: none (no matching DarkCurrent, shutter, or live_clean)"
+    if info.get("source") == "cache":
+        extra = " then reseeded" if info.get("reseeded") else ""
+        return f"catalog: cache prior (no library hit){extra}"
+    if not info.get("hit"):
+        return "catalog: none (no matching DarkCurrent, shutter, or live_clean)"
+    bits = [f"catalog: {info.get('branch') or '?'} {info.get('source') or '?'}"]
+    if info.get("complete") is True:
+        bits.append("complete")
+    elif info.get("complete") is False:
+        bits.append("incomplete")
+    frames = info.get("frames") or []
+    if frames:
+        bits.append(f"frames {int(frames[0])}–{int(frames[-1])}" if len(frames) > 1 else f"frame {int(frames[0])}")
+    qs = info.get("catalog_qs") or []
+    if qs:
+        bits.append("q=" + ",".join(f"{float(q):.0f}" for q in qs))
+    role = info.get("role") or "considered"
+    rejected = info.get("rejected_qs") or []
+    if role == "used":
+        bits.append("[used as seed]")
+    elif role == "reseeded":
+        bits.append("[used then reseeded]")
+    elif rejected and not (info.get("supported_qs") or []):
+        bits.append("[no fx support on this stack]")
+    else:
+        bits.append("[considered, not applied]")
+    return "  ".join(bits)
 
 
 def make_record(
@@ -194,6 +316,8 @@ def make_record(
     date_utc: str | None = None,
     origin: str = "",
     notes: str = "",
+    complete: bool | None = None,
+    frames: list[int] | None = None,
 ) -> dict[str, Any]:
     slim = []
     for fam in families:
@@ -209,7 +333,9 @@ def make_record(
                 "fx_ranges": fam.get("fx_ranges") or [],
             }
         )
-    return {
+    if complete is None:
+        complete = source != "in_stack_shutter"
+    rec: dict[str, Any] = {
         "source": source,
         "computer": computer,
         "channel": channel,
@@ -218,8 +344,12 @@ def make_record(
         "families": slim,
         "origin": origin,
         "notes": notes,
+        "complete": bool(complete),
         "computer_safe": sanitize_computer_name(computer),
     }
+    if frames is not None:
+        rec["frames"] = [int(i) for i in frames]
+    return rec
 
 
 def ingest_darkcurrent(
@@ -282,6 +412,7 @@ def ingest_darkcurrent(
                     date_utc=reg.get("date_utc"),
                     origin=f"darkcurrent:{trusted_run}:{label}:{channel}",
                     notes="trusted characterize run; geometry only",
+                    complete=True,
                 )
             )
     return records

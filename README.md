@@ -83,14 +83,17 @@ per_frame.csv                 # gate / q / RMS per frame
 families.json                 # FFT ridge mask definition + summary
 mask_fft.tif                  # 2-D FFT-domain support of seeded families
 mean_raw.tif / mean_cleaned.tif / mean_removed.tif
-overview.pdf                  # averages, mask, cleaning heaviness vs frame
+overview.pdf                  # averages, mask, catalog line (branch/source/used),
+                              # cleaning heaviness vs frame
                               # (also written on needs_review, with inspect-only ladder)
 overview.png                  # same page as a preview
 ladder.json                   # only on needs_review: extra candidate rungs (not applied)
 ```
 
 Priors + run logs: `{root}/.defringe_cache/`. Learned geometry also appends to
-`fringe_library/catalog.json` (q/fx only, never amplitude).
+`fringe_library/catalog.json` (q/fx only, never amplitude). That file is the
+only seed catalog: `darkcurrent`, `in_stack_shutter` (incomplete; set `frames`),
+and `live_clean`. Characterize JSON under `darkcurrent/` is not used for seeding.
 
 #### Why it is designed this way
 

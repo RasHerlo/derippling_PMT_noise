@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 import tifffile
 
+from .library import format_catalog_line
 from .seed import EVAL_ANCHOR_FRAMES as INSPECTION_ANCHOR_FRAMES
 
 OUTPUT_DIRNAME = "defringe_v22"
@@ -182,6 +183,7 @@ def write_families_json(
     prior_branch: str | None = None,
     ladder: list[dict] | None = None,
     failure_message: str | None = None,
+    catalog: dict | None = None,
 ) -> dict:
     rms = np.array([r["removed_rms"] for r in rows], dtype=float) if rows else np.zeros(0)
     n_active = (
@@ -218,6 +220,7 @@ def write_families_json(
         "reseeded": bool(reseeded),
         "status": status,
         "prior_branch": prior_branch,
+        "catalog": _jsonable(catalog if catalog is not None else seed_info.get("catalog")),
         "ladder": _jsonable(ladder) if ladder else None,
         "failure_message": failure_message,
         "families": [family_public(f) for f in families],
@@ -420,6 +423,7 @@ def write_overview_pdf(
     inspection_frames: list[dict] | None = None,
     example_triples: list[dict] | None = None,
     cleaned_label: str = "cleaned",
+    catalog: dict | None = None,
 ) -> None:
     """Summary page plus optional original | cleaned | removed inspection pages."""
     import matplotlib.pyplot as plt
@@ -451,16 +455,24 @@ def write_overview_pdf(
         wspace=0.22,
         left=0.055,
         right=0.98,
-        top=0.80 if inspection_frames else 0.84,
+        top=0.78 if inspection_frames else 0.82,
         bottom=0.07,
     )
 
     fig.text(0.055, 0.97, title, fontsize=13, fontweight="bold", va="top")
     fig.text(0.055, 0.935, subtitle, fontsize=8.5, va="top", color="0.25")
+    fig.text(
+        0.055,
+        0.905,
+        format_catalog_line(catalog),
+        fontsize=8,
+        va="top",
+        color="0.2",
+    )
 
     if status != "ok":
         fail = failure_message or status
-        fig.text(0.055, 0.90, f"STATUS: {status}  —  {fail}", fontsize=8, va="top", color="0.6")
+        fig.text(0.055, 0.875, f"STATUS: {status}  —  {fail}", fontsize=8, va="top", color="0.6")
     else:
         stats = (
             f"frames {summary.get('n_frames', len(rows))}   "
@@ -470,14 +482,14 @@ def write_overview_pdf(
             f"max {summary.get('max_removed_rms', 0):.3g}   "
             f"residual pass {100 * summary.get('frac_residual_pass', 0):.1f}%"
         )
-        fig.text(0.055, 0.90, stats, fontsize=8, va="top")
+        fig.text(0.055, 0.875, stats, fontsize=8, va="top")
         if inspection_frames:
             shown = ",  ".join(
                 f"{c['frame']} ({c['role']})" for c in inspection_frames
             )
             fig.text(
                 0.055,
-                0.875,
+                0.850,
                 f"inspection frames (later pages): {shown}",
                 fontsize=7.5,
                 va="top",
@@ -650,6 +662,7 @@ def write_readout(
     used_prior: bool,
     reseeded: bool,
     prior_branch: str | None = None,
+    catalog: dict | None = None,
 ) -> dict[str, Path | None]:
     """Write mask, per-frame table, mean TIFFs, and overview PDF into out_dir."""
     out_dir = Path(out_dir)
@@ -679,6 +692,7 @@ def write_readout(
         reseeded=reseeded,
         rows=rows,
         prior_branch=prior_branch,
+        catalog=catalog if catalog is not None else seed_info.get("catalog"),
     )
 
     mask = fft_mask_image(frame_hw, families)
@@ -733,6 +747,7 @@ def write_readout(
             inspection_frames=inspection_frames,
             example_triples=example_triples,
             cleaned_label="cleaned",
+            catalog=catalog if catalog is not None else seed_info.get("catalog"),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      overview PDF skipped: {exc}", flush=True)
@@ -772,6 +787,7 @@ def write_failure_readout(
     prior_branch: str | None = None,
     ladder: list[dict] | None = None,
     failure_message: str = "needs_review",
+    catalog: dict | None = None,
 ) -> dict[str, Path | None]:
     """Write a needs_review overview (no cleaned/removed stacks)."""
     out_dir = Path(out_dir)
@@ -798,6 +814,7 @@ def write_failure_readout(
         prior_branch=prior_branch,
         ladder=ladder,
         failure_message=failure_message,
+        catalog=catalog if catalog is not None else seed_info.get("catalog"),
     )
 
     ladder_path = out_dir / "ladder.json"
@@ -837,6 +854,7 @@ def write_failure_readout(
             status="needs_review",
             ladder=ladder,
             failure_message=failure_message,
+            catalog=catalog if catalog is not None else seed_info.get("catalog"),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      overview PDF skipped: {exc}", flush=True)
@@ -923,5 +941,6 @@ def rebuild_success_overview(out_dir: Path) -> Path:
         inspection_frames=inspection_frames,
         example_triples=example_triples,
         cleaned_label="cleaned",
+        catalog=payload.get("catalog") or (payload.get("seed") or {}).get("catalog"),
     )
     return pdf_path

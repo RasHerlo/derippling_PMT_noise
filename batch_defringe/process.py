@@ -20,7 +20,13 @@ from pmt_fringe_raw_adaptive_v22 import clean_frame_v22  # noqa: E402
 
 from .eval_report import write_eval_report
 from .experiment_xml import fingerprint_compatible
-from .library import append_catalog_record, append_local_record, lookup_prior, make_record
+from .library import (
+    append_catalog_record,
+    append_local_record,
+    catalog_status,
+    lookup_prior,
+    make_record,
+)
 from .priors import load_prior, save_prior
 from .readout import (
     cleaned_path_for,
@@ -98,12 +104,14 @@ def _write_review(
     ladder: list[dict] | None,
     message: str,
     block_specs: list[dict] | None = None,
+    catalog: dict | None = None,
 ) -> Path | None:
     n, h, w = tf.series[0].shape
     mean_raw = sample_mean_frame(tf)
     specs = list(block_specs or [])
     if not specs:
         specs = collect_block_spectra(tf)
+    catalog = catalog or seed_info.get("catalog")
     try:
         paths = write_eval_report(
             out_dir,
@@ -116,6 +124,7 @@ def _write_review(
             computer=computer,
             channel=channel,
             message=message,
+            catalog=catalog,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      eval report failed ({exc}); writing basic needs_review page", flush=True)
@@ -139,6 +148,7 @@ def _write_review(
             prior_branch=prior_branch,
             ladder=ladder,
             failure_message=message,
+            catalog=catalog,
         )
     pdf = paths.get("overview_pdf")
     return pdf if isinstance(pdf, Path) else None
@@ -208,12 +218,35 @@ def process_stack(
         seed_info: dict = {}
         reseeded = False
         had_usable_prior = False
+        supported_qs: list[float] = []
+        rejected_qs: list[float] = []
+
+        def _note_catalog(*, used: bool, reseeded_flag: bool) -> dict:
+            info = catalog_status(
+                lib_hit,
+                used=used,
+                reseeded=reseeded_flag,
+                cache_used=use_cache_prior and used,
+                supported_qs=supported_qs,
+                rejected_qs=rejected_qs,
+            )
+            seed_info["catalog"] = info
+            return info
 
         if use_library or use_cache_prior:
             medspec = sample_median_spectrum(tf)
             src_fams = library_families if use_library else prior["families"]
             if use_library:
-                src_fams = [f for f in src_fams if library_family_supported(f, medspec)]
+                kept, dropped = [], []
+                for fam in src_fams:
+                    q = float(fam["q"])
+                    if library_family_supported(fam, medspec):
+                        kept.append(fam)
+                        supported_qs.append(q)
+                    else:
+                        dropped.append(fam)
+                        rejected_qs.append(q)
+                src_fams = kept
             if src_fams:
                 families = hydrate_families(src_fams, medspec)
                 had_usable_prior = True
@@ -236,6 +269,13 @@ def process_stack(
             seed_info["mode"] = "fresh_seed"
             if prior_branch:
                 seed_info["prior_branch"] = prior_branch
+            if library_families and medspec is not None and not supported_qs and not rejected_qs:
+                for fam in library_families:
+                    q = float(fam["q"])
+                    if library_family_supported(fam, medspec):
+                        supported_qs.append(q)
+                    else:
+                        rejected_qs.append(q)
 
         block_specs = _pop_block_specs(seed_info)
 
@@ -245,6 +285,7 @@ def process_stack(
             )
             seed_info["ladder"] = ladder
             msg = "No high-confidence paired fringe family in fringe-rich scan."
+            _note_catalog(used=False, reseeded_flag=False)
             pdf = _write_review(
                 tif_path=tif_path,
                 out_dir=out_dir,
@@ -293,6 +334,7 @@ def process_stack(
                 )
                 seed_info["ladder"] = ladder
                 msg = f"QC failed then reseed empty: {qc_msg}"
+                _note_catalog(used=True, reseeded_flag=True)
                 pdf = _write_review(
                     tif_path=tif_path,
                     out_dir=out_dir,
@@ -330,6 +372,7 @@ def process_stack(
             )
             seed_info["ladder"] = ladder
             msg = f"QC failed: {qc_msg}"
+            _note_catalog(used=had_usable_prior, reseeded_flag=reseeded)
             pdf = _write_review(
                 tif_path=tif_path,
                 out_dir=out_dir,
@@ -360,6 +403,7 @@ def process_stack(
             )
 
         if not write_clean:
+            _note_catalog(used=had_usable_prior, reseeded_flag=reseeded)
             mean_raw = sample_mean_frame(tf)
             paths = write_failure_readout(
                 out_dir,
@@ -394,6 +438,7 @@ def process_stack(
                 prior_branch=prior_branch,
             )
 
+        _note_catalog(used=had_usable_prior and not reseeded, reseeded_flag=reseeded)
         if diag_dir is not None:
             diag_dir = Path(diag_dir)
             diag_dir.mkdir(parents=True, exist_ok=True)
@@ -536,6 +581,7 @@ def process_stack(
             date_utc=recording_date,
             origin=str(tif_path),
             notes=qc_msg,
+            complete=True,
         )
         try:
             append_local_record(batch_root, rec)
