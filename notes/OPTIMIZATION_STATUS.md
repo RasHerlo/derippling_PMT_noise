@@ -7,7 +7,7 @@ This file + `optimization_manifest.json` are the handoff surface for that repo.
 **Repo:** https://github.com/RasHerlo/derippling_PMT_noise  
 **Sandbox data:** `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`  
 **Machine-readable twin:** [`optimization_manifest.json`](optimization_manifest.json)  
-**Last updated:** 2026-08-30 (catalog + image-domain plan)
+**Last updated:** 2026-09-01 (congruent linescan + 10-frame seed compare)
 
 ---
 
@@ -71,6 +71,11 @@ ratio_start=1.4  ratio_full=3.5
 | 2026-08-25 | Dark-current controls (`darkcurrent/`) | First measured characterisation of the fringe layer on Shinano | `notes/DARKCURRENT.md` |
 | 2026-08-26 | `darkcurrent confirm` battery | ChanA q≈6 confirmed real and time-varying, 0 false positives | `notes/DARKCURRENT.md` §3.1c |
 | 2026-08-28 | `batch_defringe` v0.4.0 | Raster fingerprint (drop mag/µm; add scanMode/avg/alignment); library A/B/C; recurrent seed; track lock; failure PDF; single TIFF = batch | `fringe_library/catalog.json` |
+| 2026-08-30 | Seed catalog + image-check plan | `darkcurrent` / `in_stack_shutter` / `live_clean`; Haj Grant 756–760 = quiet window not inventory | `notes/HANDOFF.md` |
+| 2026-09-01 | Recursive image-domain check | Propose→notch→score `removed`; ridge-edge compact spots do not reject; per-frame applied FFT heatmap | `batch_defringe/image_check.py`, `tests/test_image_check.py` |
+| 2026-09-01 | Spatial + fx seed **probe** | fy-only misses 160’s vertical fringes. Do not `max(fy,fx)` then fy-notch. H-trace P→qx steered 160 to fx q=20 (image-test PASS); greedy FFT fx q=40 failed ridges. Not in `process_stack`. | `batch_defringe/spatial_seed.py`, `tests/test_spatial_seed.py`, ChanA `defringe_v22/spatial_seed/` |
+| 2026-09-01 | Congruent 4-cut seed | H, V, both diagonals must share one `(qy, qx)` or **none**. 160 = fx qx≈15.2; 756 = none (2-D ridge). Thin-peak mask, not full rows/columns. | `batch_defringe/congruence.py`, `tests/test_congruence.py` |
+| 2026-09-01 | 10-frame seed compare | Original 4/10 PASS, linescan 4/10, **combo 6/10**. Combo adds fx on 160/1245; shutter still needs fy; 756 ranking picks q=10 over q=49. 700 still off. Not in `process_stack`. | `batch_defringe/seed_compare.py`, `tests/test_seed_compare.py`, ChanA `spatial_seed/seed_compare_10.pdf` |
 
 ---
 
@@ -97,4 +102,7 @@ defringe_runs/v22_full_seeded500/
 5. **Implemented 2026-08-28 (`batch_defringe` v0.4.0):** assume `mag`/`pixelSizeUM` do not affect PMT fringes (dropped from prior key). Library A/B/C in `fringe_library/catalog.json`. Failure PDF + inspect-only ladder. Recurrent seeds, track identity lock. Single TIFF = `process_stack`.  
 6. **2026-08-28 evening:** Haj Grant frames 756–760 are a same-file shutter quiet window (ChanA q≈10, ChanB q≈81). Not an inventory of the stack. Pickup `notes/HANDOFF.md`.  
 7. **Implemented 2026-08-30:** one seed catalog (`darkcurrent` / `in_stack_shutter` incomplete+`frames` / `live_clean`). Overview + `families.json` show catalog use. `darkcurrent/` not used for seeding.  
-8. **Next implement:** recursive image-domain check on `removed` (FOV-wide / even / not blob), then later an x-walk proposer with **no tile cleans**. Do not promote Haj Grant ChanA until the check exists. Details and cautions: `notes/HANDOFF.md`.  
+8. **Implemented 2026-09-01:** recursive image-domain check (`python -m batch_defringe.image_check`). Compact spots on a ridge field do not reject. Do not promote Haj Grant ChanA yet — live 160/700 still fy-gate=0.  
+9. **Probe 2026-09-01 (not production):** spatial line-scans + fx-column families. Frame 160 vertical fringes are an fx family; line-scan qx beat the tallest FFT fx peak.  
+10. **Probe 2026-09-01 evening:** congruent 4-cut seed + 10-frame compare. Combo 6/10 PASS vs original 4/10. Next: fy and fx as **separate** image-check candidates (congruence proposes fx; rank fy families by image-test). Do not promote Haj Grant ChanA — 700 still gate=0. Details: `notes/HANDOFF.md`.  
+11. **Later:** x-walk proposer, overlapping windows, **no tile cleans**.  

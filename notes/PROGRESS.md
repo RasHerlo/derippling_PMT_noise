@@ -1,3 +1,42 @@
+# Progress handoff — 2026-09-01 evening
+
+Pickup: **`notes/HANDOFF.md`**.
+
+Landed: congruent 4-cut seed (`batch_defringe.congruence`); 10-frame compare
+of linescan vs original fy detect vs combo (`batch_defringe.seed_compare`).
+Tests: `tests/test_congruence.py`, `tests/test_seed_compare.py`.
+
+On Haj Grant ChanA (160, 1061, 700, shutter 756/760, random 920/997/1238/1245/1309):
+original 4/10 PASS, linescan 4/10, **combo 6/10**. Combo is the only list that
+covers both families: fx on 160/1245 (original empty), fy on shutter/1061/1309
+(congruence none or weaker). 756: rank fy families by image-test, not peak
+row-z (q=10 vs q=49). Frame 700 still gate=0. Not in `process_stack`.
+
+Next: if 160/1245 fx `removed` is the vertical fringe, add fx as a **separate**
+image-check candidate. Still no Haj Grant ChanA promote. Later: leftover round
+for the second family; x-walk, no tiles.
+
+---
+
+# Progress handoff — 2026-09-01
+
+Pickup: **`notes/HANDOFF.md`**.
+
+Landed: recursive image-domain check (`batch_defringe.image_check`); spatial +
+fx seed **probe** (`batch_defringe.spatial_seed`). Tests:
+`tests/test_image_check.py`, `tests/test_spatial_seed.py`.
+
+Learned: fy-row seeder misses vertical (x-periodic) fringes on Haj Grant ChanA
+160. Do not blend `max(fy,fx)` into a fy notch. Horizontal line-scan period →
+qx, then an fx-column family, is the candidate that gated on 160 (image-test
+PASS at q 11→20); greedy FFT fx peak at 40 failed ridges. Not in production.
+
+Next: review 160 `spatial_fx` `removed`; if it is the vertical fringe, propose
+fy and fx as separate image-check candidates. Still no Haj Grant ChanA promote.
+Later: x-walk, no tiles.
+
+---
+
 # Progress handoff — 2026-08-30
 
 Pickup: **`notes/HANDOFF.md`**.

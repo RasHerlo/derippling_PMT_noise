@@ -4,7 +4,7 @@
   "overview_repo": "https://github.com/RasHerlo/figure_for_cAMP_Neu_paper",
   "overview_note": "Overview repo pulls from this manifest; do not push catalog edits from deripple agents.",
   "sandbox_root": "F:\\bPACNewData2026\\PreProcessing Optimization\\Level3b copy",
-  "updated": "2026-08-19",
+  "updated": "2026-09-01",
   "current_approach": {
     "id": "gpt_raw_adaptive_v22_pack_D",
     "script": "reference/gpt/pmt_fringe_raw_adaptive_v22.py",
