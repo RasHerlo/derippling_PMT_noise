@@ -40,6 +40,7 @@ from .readout import (
 from scipy.ndimage import gaussian_filter1d, maximum_filter1d
 
 from .seed import hydrate_families
+from .shutter_detect import low_std_runs, scan_frame_stats
 
 SHUTTER_DEFAULT = tuple(range(756, 761))  # plateau; 761 is already opening
 LIVE_DEFAULT = (160, 700, 1061)
@@ -58,32 +59,6 @@ def _xvalid(width: int) -> np.ndarray:
 
 def frame_std(frame: np.ndarray) -> float:
     return float(np.std(np.asarray(frame, dtype=np.float64)))
-
-
-def scan_frame_stats(tf: tifffile.TiffFile) -> list[dict]:
-    n = int(tf.series[0].shape[0])
-    out = []
-    for i in range(n):
-        f = np.asarray(tf.pages[i].asarray(), dtype=np.float32)
-        out.append({"frame": i, "mean": float(f.mean()), "std": float(f.std())})
-    return out
-
-
-def low_std_runs(stats: list[dict], *, ratio: float = 0.45, min_len: int = 3) -> list[list[int]]:
-    med = float(np.median([s["std"] for s in stats]))
-    thresh = med * ratio
-    runs: list[list[int]] = []
-    cur: list[int] = []
-    for s in stats:
-        if s["std"] <= thresh:
-            cur.append(int(s["frame"]))
-        elif cur:
-            if len(cur) >= min_len:
-                runs.append(cur)
-            cur = []
-    if len(cur) >= min_len:
-        runs.append(cur)
-    return runs
 
 
 def _family_peak_score(medspec: np.ndarray, fam: dict) -> float:

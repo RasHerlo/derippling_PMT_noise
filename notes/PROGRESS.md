@@ -1,3 +1,56 @@
+# Progress handoff — 2026-09-02 evening
+
+Pickup: **`notes/HANDOFF.md`** + **`notes/V4_PIPELINE.md`**.
+Engine: `batch_defringe.process_v4` (full stack default; `--seed10` probe).
+
+v4 is coded. One mask per frame: catalog → shutter-learn → linescan center
+peak + edge/segment qs → leftover FFT. Peak = thin conjugate blobs; ridge =
+pack_D local excess. No stack q-tracker. Writes `defringe_v4/` only.
+
+ChanA and ChanB are **not coupled**. Seed-10 reused ChanA `seed_compare`
+indices on ChanB for convenience; full-stack inspect frames are per channel.
+A shared shutter window (Haj Grant 756–760) is experiment timing, not a
+shared fringe family.
+
+Seed-10 Haj Grant: ChanA 160 RMS 17.9 from fx 15.2 + edges 12.1/18.4 (leftover
+still added greedy q=40). ChanB catalog q=81; 1061 no longer empty. v2.2
+remains production. Do not promote until full-stack PDFs are reviewed.
+
+---
+
+# Progress handoff — 2026-09-02 v4 seed-10
+
+Pickup: **`notes/V4_PIPELINE.md`**. Engine: `batch_defringe.process_v4`.
+Haj Grant 10-frame probe (same indices as seed_compare) →
+`<channel>/defringe_v4/seed10/overview.pdf`. ChanA 160 **rms 1.98**, agree 1.0,
+not empty. Chirp/edges still deferred. Does not overwrite v22/v3.
+
+---
+
+# Progress handoff — 2026-09-02 afternoon
+
+Pickup: **`notes/HANDOFF.md`** + **`notes/V4_PIPELINE.md`**.
+Schematic: **`v4_pipeline_schematic.pdf`**.
+
+Agreed: one mask per frame, ranked lines (linescan∩FFT first), soft α,
+recursion adds lines / raises α, undo last step if `removed` looks like
+cells or diverges from predicted IFFT. Shutter: push. No stack q-tracker
+in charge. v3/v22 not overwritten. Implementation of the cleaner not started.
+
+---
+
+# Progress handoff — 2026-09-02
+
+Pickup: **`notes/HANDOFF.md`**.
+
+Landed: v3 integrated pipeline (`batch_defringe.process_v3`,
+`batch_defringe.v3_report`). Schematic `v3_pipeline_schematic.pdf`. Haj Grant
+ChanA/B run into `defringe_v3/` (cleaned + removed stacks, overview PDF).
+Does not overwrite `defringe_v22`. Catalog is not appended. Tests:
+`tests/test_process_v3.py`.
+
+---
+
 # Progress handoff — 2026-09-01 evening
 
 Pickup: **`notes/HANDOFF.md`**.

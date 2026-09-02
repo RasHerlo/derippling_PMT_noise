@@ -32,6 +32,8 @@ recommendation is unchanged (v2.2 pack_D still scores better), and `q≈6` and
 `q≈14` may well be one comb rather than a true-versus-false pair.
 
 **Do not** recycle SUPPORT outputs into another defringe pass.
+v4 (`defringe_v4/`) is a probe — **do not** retrain SUPPORT on it. Preferred
+input is still `inputs/defringed_v22/`.
 
 ## Requested next work
 

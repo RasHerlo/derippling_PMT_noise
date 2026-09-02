@@ -1,22 +1,110 @@
-# Pickup — 2026-09-01 evening
+# Pickup — 2026-09-02 evening
+
+**v4 engine is coded** (`batch_defringe/process_v4.py`). Production remains
+v2.2 `defringe_v22`. v3 `defringe_v3/` is a probe. Do not overwrite those
+TIFFs. Design: `notes/V4_PIPELINE.md`, schematic `v4_pipeline_schematic.pdf`.
+
+```
+python -m batch_defringe.process_v4 --root "F:\\bPACNewData2026\\Haj Grant Example"
+```
+
+writes `<channel>/defringe_v4/` (cleaned + removed stacks, `per_frame.csv`,
+`overview.pdf`). `--seed10` is the 10-frame probe only.
+
+## Aim (the thing the cleaner is for)
+
+Fringes are **symmetric** plane-wave structure in the FOV. They come and go
+across the stack, change strength and sometimes direction/shape, and their
+period **shrinks toward the left/right edges** because the resonant scanner
+slows down.
+
+For **each frame** there is one hypothetically optimal FFT mask: it
+attenuates the full fringe pattern and leaves biology. Linescans (image
+domain) and FFT families are two views of that **same** structure. They
+should be **integrated into one mask**, then pushed:
+
+- look at what was removed and what is left
+- fold leftover fringe back into the mask
+- stop when `removed` starts looking like cells (except shutter: no biology,
+  so push harder)
+
+**Predicted fringe** = IFFT of the energy the current mask attenuates.
+As the mask develops it should look more like a clean, symmetric fringe.
+`removed` (raw − cleaned) should stay close to that prediction. If they
+diverge, biology (or other non-fringe) sat in those bins — back off the
+last increment.
+
+v4 grows **one mask per frame**. Add order: catalog guess → shutter-learn
+guess → linescan **center peak** (`seed_peak_mask`) → **edge/segment qs**
+from the same traces → leftover FFT. Peak pieces are thin conjugate blobs
+(α-scaled). Ridge pieces are pack_D local excess. No stack q-tracker.
+
+**ChanA and ChanB are not coupled.** Fringe families differ (Haj Grant
+seed-10: ChanA no catalog, shutter fy 10/30, live often fx ~15; ChanB
+catalog q=81, shutter 81/162). A shared shutter *time* window (756–760)
+is the same experiment’s mechanical shutter, not a shared fringe. Seed-10
+reused ChanA `seed_compare` indices on ChanB for convenience only. The
+full-stack overview picks inspect frames **per channel**.
+
+v3 still union-applies separate pack_D families with a stack q-tracker.
+Do not promote v4 until the Haj Grant full-stack PDFs are reviewed.
+
+## Known fringe features (how we treat them)
+
+| Feature | Approach |
+|---|---|
+| **Symmetric across the FOV** | Conjugate peaks in FFT (±q, ±fx). A one-sided blob is not a fringe. Linescan H/V/diags must describe one `(qy, qx)` or **none**. |
+| **Dynamic; move a bit in time** | Per-frame mask. A prior (last frame, shutter, catalog) is a hint, not the applied q. |
+| **More different between PMTs than between experiments on the same PMT** | Catalog / priors keyed by computer + channel + raster. ChanA and ChanB are separate problems. |
+| **Period shortens toward the resonant edges** | One chirped structure, **not** a second family. Center holds the main P; edges are nearby bins / local P(x). Overlapping x-windows as a proposer; **no independent tile cleans**. |
+| **Sporadic; power varies by frame** | Empty mask is allowed. Gate / alpha follow this frame’s evidence. |
+| **Direction / shape can change** | fy ridges and fx columns (incl. fy=0) are both legal. Integrate into one mask; do not blend into one gate. |
+| **Harmonics exist** (e.g. q and 3q) | Extra ridges of the **same** pattern; add them as later, more dubious layers, not as a rival cleaner. |
+| **2-D ridge on shutter** | Linescan congruence can honestly be **none**. FFT fy is required. No biology → push the mask. |
+| **Biology sits on top of the fringe** | Image-test `removed` **and** `removed` vs predicted IFFT. Live: back off when cells appear or the two images diverge. Shutter: ignore the biology brake; predicted should still look like fringe. |
+
+---
 
 ChanB production `defringe_v22` is still fine. Do **not** overwrite Haj Grant
-ChanA production TIFFs. Do **not** touch `DATA\SUPPORT_*`.
+ChanA production TIFFs unless asked. Do **not** touch `DATA\SUPPORT_*`.
 
-Image-check, spatial-seed, congruence, and the 10-frame seed compare are
-**probes**. None of them is wired into `process_stack`.
+**v3 probe** (`python -m batch_defringe.process_v3`) writes
+`<channel>/defringe_v3/` only. Schematic: `v3_pipeline_schematic.pdf` at the
+repo root. Catalog is not appended. v2.2 remains the production cleaner.
+
+Shutter quiet windows are auto-detected (FOV std cliff, not mean). Haj Grant
+ChanA/B both land on **756–760**. Image-test still vetoes shutter q on live.
 
 ## Where we are
 
 Protocol slot is still `raw → v2.2 pack_D → SUPPORT retrain → suite2p`.
+v4 is the agreed next cleaner (per-frame one mask). Not a promote.
 
-| Channel (Haj Grant Example) | Production `defringe_v22` | Why |
+| Channel (Haj Grant Example) | Production `defringe_v22` | v4 seed-10 (2026-09-02) |
 |---|---|---|
-| ChanB | **ok**, q≈81 | Branch C live_clean; tracking held |
-| ChanA | **needs_review** | No catalog hit with fx support. fy seeder still misses vertical live fringes (160). Frame 700 still gate=0 on every method in the 10-frame compare. |
+| ChanB | **ok**, q≈81 | Catalog branch C q=81 used where it hydrates. 1061 no longer empty (fy peak ~7). |
+| ChanA | **needs_review** | 160: linescan peak fx **15.2** + edge bands 12.1/18.4, RMS **17.9** (was 1.98 when pack_D columns stood in for linescan). Leftover FFT still added greedy fx q=40 after that. |
 
-Frames **756–760** are a same-file shutter quiet window, not an inventory of
-the stack.
+Frames **756–760** on Haj Grant are the auto-detected shutter quiet window
+(contrast cliff). Still not an inventory of the stack. Same window on both
+PMTs because the shutter is shared in time.
+
+## Landed — v4 per-frame engine
+
+`python -m batch_defringe.process_v4 --root "<experiment>"` →
+`<channel>/defringe_v4/` (full stack). `--seed10` → `defringe_v4/seed10/`.
+
+Tests: `python tests/test_process_v4.py`. Schematic:
+`python -m batch_defringe.v4_schematic`.
+
+## Landed — in-stack shutter detect
+
+`python -m batch_defringe.shutter_detect` →
+`DATA/shutter_detect_overview.pdf`.
+
+Quiet if `std ≤ 0.40 × p75(std)` for ≥3 frames after a cliff
+(`Δstd ≥ 0.35 × live_std`). Mean is plotted but not the cut (PMT offset
+stays ~850 ADU on ChanA). Tests: `python tests/test_shutter_detect.py`.
 
 ## Landed — 10-frame seed compare
 
@@ -87,19 +175,23 @@ candidates**. Do not `max(fy, fx)` then fy-notch.
 | 756 | **3.19** at q=10 | 3.32 at q=13 |
 | 1061 | **0.61** at q=12 | 0.12 |
 
+## Landed — v3 integrated pipeline (probe)
+
+`python -m batch_defringe.process_v3 --root "<experiment>"`
+
+Union apply of image-tested fy **and** fx families. Eval leftover loop
+(catalog → shutter-learn → linescan → leftover FFT). Writes cleaned +
+removed stacks, `per_frame.csv`, `overview.pdf` with discarded-mask and
+inspect pages. Tests: `python tests/test_process_v3.py`.
+
 ## Next
 
-1. Review `seed_compare_10.pdf` `removed` panels (especially 160 / 1245 fx and
-   756 q=10 vs q=49).
-2. If those fx `removed` fields are the vertical fringes: add **fx families as
-   separate** proposals in the image-check loop (congruence as the fx
-   proposer; original fy detect unchanged). Rank fy families by image-test,
-   not peak row-z.
-3. Recursive leftover: after accepting fy, leftover fx is a second round —
-   combo today picks one family per frame.
-4. Later: x-walk as a proposer only — overlapping windows, **no tile cleans**.
-5. Do not promote Haj Grant ChanA until live 700 (and similar off frames)
-   either gate on a real family or are judged fringe-free.
+1. Review Haj Grant full-stack `defringe_v4/overview.pdf` (ChanA and ChanB).
+   Inspect frames are per channel (shutter mid/start/end, strong, weak, empty,
+   brake, most-lines) — not the ChanA seed_compare ten.
+2. Watch leftover FFT (ChanA 160 still accepted greedy fx q=40 after the
+   real 15.2+edges). Do not promote until then.
+3. Later: x-walk as a proposer only — overlapping windows, **no tile cleans**.
 
 ## Catalog (unchanged)
 
@@ -118,6 +210,12 @@ In-stack shutter is incomplete (set `frames`). Amplitude is never copied.
 ## Probe artifacts (not in git)
 
 ```
+F:\...\ChanA\defringe_v4\overview.pdf
+F:\...\ChanB\defringe_v4\overview.pdf
+F:\...\ChanA\defringe_v4\seed10\overview.pdf
+F:\...\ChanB\defringe_v4\seed10\overview.pdf
+F:\...\ChanA\defringe_v3\overview.pdf
+F:\...\ChanB\defringe_v3\overview.pdf
 F:\...\ChanA\defringe_v22\spatial_seed\seed_compare_10.pdf
 F:\...\ChanA\defringe_v22\spatial_seed\congruence_frame_160.pdf
 F:\...\ChanA\defringe_v22\spatial_seed\congruence_frame_756.pdf
@@ -127,6 +225,11 @@ F:\...\ChanB\defringe_v22\overview.pdf
 ```
 
 ```
+python -m batch_defringe.process_v4 --root "F:\\bPACNewData2026\\Haj Grant Example"
+python -m batch_defringe.process_v4 --root "F:\\bPACNewData2026\\Haj Grant Example" --seed10
+python tests/test_process_v4.py
+python -m batch_defringe.process_v3 --root "F:\\bPACNewData2026\\Haj Grant Example"
+python tests/test_process_v3.py
 python -m batch_defringe.seed_compare
 python -m batch_defringe.congruence --frame 160
 python -m batch_defringe.image_check

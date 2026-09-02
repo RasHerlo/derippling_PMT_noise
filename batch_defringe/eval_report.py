@@ -215,6 +215,7 @@ def write_eval_report(
     message: str,
     anchors: tuple[int, ...] = EVAL_ANCHOR_FRAMES,
     catalog: dict | None = None,
+    shutter: dict | None = None,
 ) -> dict[str, Path | None]:
     """Multi-page trial-clean PDF. Does not write a full-stack cleaned TIFF."""
     import matplotlib.pyplot as plt
@@ -258,6 +259,17 @@ def write_eval_report(
         )
         fig.savefig(png_path, dpi=130)
         pdf.savefig(fig, dpi=140)
+
+        if shutter and (shutter.get("mean") or shutter.get("std") or shutter.get("frames")):
+            from .shutter_detect import draw_shutter_page, format_shutter_span
+
+            draw_shutter_page(
+                fig,
+                title=f"Shutter detect  ·  {format_shutter_span(shutter)}",
+                subtitle="Contrast cliff on FOV std. Check the orange span. Not applied as a hard seed.",
+                det=shutter,
+            )
+            pdf.savefig(fig, dpi=140)
 
         for rung in EVAL_Z_STEPS:
             families, spec, info = families_at_rung(block_specs, rung, medspec)
@@ -345,6 +357,7 @@ def write_eval_report(
                     "example_frames": chosen,
                     "score_trace": trace,
                     "ladder": ladder_out,
+                    "shutter": shutter,
                 }
             ),
             indent=2,

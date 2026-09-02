@@ -4,7 +4,7 @@
   "overview_repo": "https://github.com/RasHerlo/figure_for_cAMP_Neu_paper",
   "overview_note": "Overview repo pulls from this manifest; do not push catalog edits from deripple agents.",
   "sandbox_root": "F:\\bPACNewData2026\\PreProcessing Optimization\\Level3b copy",
-  "updated": "2026-09-01",
+  "updated": "2026-09-02",
   "current_approach": {
     "id": "gpt_raw_adaptive_v22_pack_D",
     "script": "reference/gpt/pmt_fringe_raw_adaptive_v22.py",
@@ -71,7 +71,8 @@
     {"id": "gpt_point_notch_v1", "status": "demoted", "one_liner": "Discrete peak notches"},
     {"id": "gpt_raw_adaptive_v2", "status": "superseded", "one_liner": "Conservative ridge adaptive"},
     {"id": "gpt_raw_adaptive_v21_pack_B", "status": "superseded_by_v22", "one_liner": "Confidence-scaled + residual pass"},
-    {"id": "gpt_raw_adaptive_v22_pack_D", "status": "current", "one_liner": "Stronger residual + softer ratio thresholds"}
+    {"id": "gpt_raw_adaptive_v22_pack_D", "status": "current", "one_liner": "Stronger residual + softer ratio thresholds"},
+    {"id": "batch_defringe_v4", "status": "probe_not_promoted", "one_liner": "Per-frame one mask: linescan peak+edges + prior guesses + leftover FFT"}
   ],
   "handoffs": {
     "support": "notes/HANDOFF_SUPPORT.md — retrain on inputs/defringed_v22",

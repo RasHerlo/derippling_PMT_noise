@@ -46,6 +46,12 @@ from .seed import (
     sample_median_spectrum,
     track_all,
 )
+from .shutter_detect import (
+    detect_shutter_windows,
+    format_shutter_span,
+    scan_frame_stats,
+    shutter_public,
+)
 
 PACK_D = dict(
     frame_search=2,
@@ -125,6 +131,7 @@ def _write_review(
             channel=channel,
             message=message,
             catalog=catalog,
+            shutter=seed_info.get("shutter"),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      eval report failed ({exc}); writing basic needs_review page", flush=True)
@@ -221,6 +228,15 @@ def process_stack(
         supported_qs: list[float] = []
         rejected_qs: list[float] = []
 
+        shutter_det = detect_shutter_windows(scan_frame_stats(tf))
+        shutter_pub = shutter_public(shutter_det)
+        seed_info["shutter"] = shutter_pub
+        print(f"      shutter auto: {format_shutter_span(shutter_det)}", flush=True)
+
+        def _keep_shutter(info: dict) -> dict:
+            info["shutter"] = shutter_pub
+            return info
+
         def _note_catalog(*, used: bool, reseeded_flag: bool) -> dict:
             info = catalog_status(
                 lib_hit,
@@ -250,14 +266,16 @@ def process_stack(
             if src_fams:
                 families = hydrate_families(src_fams, medspec)
                 had_usable_prior = True
-                seed_info = {
-                    "mode": "soft_prior",
-                    "prior_branch": prior_branch if use_library else "cache",
-                    "prior_source": (lib_hit or {}).get("origin")
-                    if use_library
-                    else prior.get("source_tif"),
-                    "prior_qs": [float(f["q"]) for f in src_fams],
-                }
+                seed_info = _keep_shutter(
+                    {
+                        "mode": "soft_prior",
+                        "prior_branch": prior_branch if use_library else "cache",
+                        "prior_source": (lib_hit or {}).get("origin")
+                        if use_library
+                        else prior.get("source_tif"),
+                        "prior_qs": [float(f["q"]) for f in src_fams],
+                    }
+                )
             else:
                 families = None
                 had_usable_prior = False
@@ -266,6 +284,7 @@ def process_stack(
             families, medspec, seed_info = detect_fringe_rich(
                 tf, library_families=library_families or None
             )
+            _keep_shutter(seed_info)
             seed_info["mode"] = "fresh_seed"
             if prior_branch:
                 seed_info["prior_branch"] = prior_branch
@@ -325,6 +344,7 @@ def process_stack(
             families, medspec, seed_info = detect_fringe_rich(
                 tf, library_families=library_families or None
             )
+            _keep_shutter(seed_info)
             block_specs = _pop_block_specs(seed_info)
             seed_info["mode"] = "reseed_after_qc_fail"
             seed_info["prior_qc"] = qc_msg

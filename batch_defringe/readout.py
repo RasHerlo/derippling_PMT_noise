@@ -225,6 +225,7 @@ def write_families_json(
         "failure_message": failure_message,
         "families": [family_public(f) for f in families],
         "summary": summary,
+        "shutter": _jsonable((seed_info or {}).get("shutter")),
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return summary
@@ -424,6 +425,7 @@ def write_overview_pdf(
     example_triples: list[dict] | None = None,
     cleaned_label: str = "cleaned",
     catalog: dict | None = None,
+    shutter: dict | None = None,
 ) -> None:
     """Summary page plus optional original | cleaned | removed inspection pages."""
     import matplotlib.pyplot as plt
@@ -610,8 +612,8 @@ def write_overview_pdf(
                 color=f"C{j}",
                 label=f"fam{j} q (seed {families[j]['q']:.0f})",
             )
-        ax_q.set_ylabel("tracked q")
-        ax_q.set_xlabel("frame")
+        ax_q.set_ylabel("tracked q  (±10 / 50-fr block; apply ±2)")
+        ax_q.set_xlabel("frame  ·  fx support is the seed template; gate/q walk per frame")
         ax_q.legend(fontsize=7, loc="upper right", frameon=False)
     else:
         ax_tr.set_axis_off()
@@ -623,6 +625,16 @@ def write_overview_pdf(
     fig.savefig(png_path, dpi=130)
     with PdfPages(path) as pdf:
         pdf.savefig(fig, dpi=150)
+        if shutter and (shutter.get("mean") or shutter.get("std") or shutter.get("frames") is not None):
+            from .shutter_detect import draw_shutter_page, format_shutter_span
+
+            draw_shutter_page(
+                fig,
+                title=f"Shutter detect  ·  {format_shutter_span(shutter)}",
+                subtitle="Contrast cliff on FOV std. Not a hard seed. Check the orange span against the stills in shutter_detect_overview.pdf.",
+                det=shutter,
+            )
+            pdf.savefig(fig, dpi=150)
         if example_triples:
             for start in range(0, len(example_triples), FRAMES_PER_PAGE):
                 chunk = example_triples[start : start + FRAMES_PER_PAGE]
@@ -748,6 +760,7 @@ def write_readout(
             example_triples=example_triples,
             cleaned_label="cleaned",
             catalog=catalog if catalog is not None else seed_info.get("catalog"),
+            shutter=seed_info.get("shutter"),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      overview PDF skipped: {exc}", flush=True)
@@ -855,6 +868,7 @@ def write_failure_readout(
             ladder=ladder,
             failure_message=failure_message,
             catalog=catalog if catalog is not None else seed_info.get("catalog"),
+            shutter=seed_info.get("shutter"),
         )
     except Exception as exc:  # noqa: BLE001
         print(f"      overview PDF skipped: {exc}", flush=True)
@@ -942,5 +956,6 @@ def rebuild_success_overview(out_dir: Path) -> Path:
         example_triples=example_triples,
         cleaned_label="cleaned",
         catalog=payload.get("catalog") or (payload.get("seed") or {}).get("catalog"),
+        shutter=payload.get("shutter") or (payload.get("seed") or {}).get("shutter"),
     )
     return pdf_path
