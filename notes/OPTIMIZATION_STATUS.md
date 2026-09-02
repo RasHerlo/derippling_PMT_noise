@@ -7,7 +7,7 @@ This file + `optimization_manifest.json` are the handoff surface for that repo.
 **Repo:** https://github.com/RasHerlo/derippling_PMT_noise  
 **Sandbox data:** `F:\bPACNewData2026\PreProcessing Optimization\Level3b copy`  
 **Machine-readable twin:** [`optimization_manifest.json`](optimization_manifest.json)  
-**Last updated:** 2026-09-02 (v4 engine coded, not promoted)
+**Last updated:** 2026-09-02 (v4 Haj Grant full stacks written, not promoted)
 
 ---
 
@@ -78,6 +78,7 @@ ratio_start=1.4  ratio_full=3.5
 | 2026-09-01 | 10-frame seed compare | Original 4/10 PASS, linescan 4/10, **combo 6/10**. Combo adds fx on 160/1245; shutter still needs fy; 756 ranking picks q=10 over q=49. 700 still off. Not in `process_stack`. | `batch_defringe/seed_compare.py`, `tests/test_seed_compare.py`, ChanA `spatial_seed/seed_compare_10.pdf` |
 | 2026-09-02 | v3 integrated pipeline | Shutter detect + congruence + leftover FFT + image-test + union apply. Writes `defringe_v3/` (not v22). Schematic `v3_pipeline_schematic.pdf`. Not a promote. | `batch_defringe/process_v3.py`, `v3_report.py`, `tests/test_process_v3.py` |
 | 2026-09-02 | v4 per-frame engine | One growing mask: catalog + shutter-learn guesses, linescan peak+edges, leftover FFT. Seed-10 ChanA 160 RMS 17.9. Full stack writes `defringe_v4/`. Not a promote. | `batch_defringe/process_v4.py`, `v4_report.py`, `tests/test_process_v4.py` |
+| 2026-09-02 | v4 Haj Grant full stacks | ChanA 99.2% active, median RMS 8.94; ChanB 95.5%, 6.43. Removed RMS **uncorrelated** (r=−0.004). Shared shutter 756–760 is timing only. Not a promote. | `DATA/*/defringe_v4/`, `DATA/defringe_v4_rms_ChanA_ChanB.pdf` |
 
 ---
 
@@ -108,5 +109,6 @@ defringe_runs/v22_full_seeded500/
 9. **Probe 2026-09-01 (not production):** spatial line-scans + fx-column families. Frame 160 vertical fringes are an fx family; line-scan qx beat the tallest FFT fx peak.  
 10. **Probe 2026-09-01 evening:** congruent 4-cut seed + 10-frame compare. Combo 6/10 PASS vs original 4/10. Next: fy and fx as **separate** image-check candidates (congruence proposes fx; rank fy families by image-test). Do not promote Haj Grant ChanA — 700 still gate=0. Details: `notes/HANDOFF.md`.  
 11. **Probe 2026-09-02:** v3 integrated pipeline (`process_v3`) — shutter + linescan + leftover FFT + image-test + union apply into `defringe_v3/`. Schematic `v3_pipeline_schematic.pdf`. Not a promote.  
-12. **Coded 2026-09-02 evening:** v4 one-mask-per-frame (`process_v4`). Catalog/shutter-learn guesses; linescan thin-peak + chirp edges; leftover FFT last. Writes `defringe_v4/` (not v22). ChanA/ChanB not coupled. Not a promote. `notes/V4_PIPELINE.md`.  
-13. **Later:** x-walk proposer, overlapping windows, **no tile cleans**.  
+12. **Coded 2026-09-02 evening:** v4 one-mask-per-frame (`process_v4`). Catalog/shutter-learn guesses; linescan thin-peak + chirp edges; leftover FFT last. Writes `defringe_v4/` (not v22).  
+13. **Ran 2026-09-02 night:** Haj Grant ChanA/B full stacks. ChanA 99.2% / RMS 8.94; ChanB 95.5% / 6.43. Removed RMS uncorrelated (r=−0.004). Inspect frames per channel. Not a promote.  
+14. **Later:** x-walk proposer, overlapping windows, **no tile cleans**.  

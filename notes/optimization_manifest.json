@@ -72,7 +72,7 @@
     {"id": "gpt_raw_adaptive_v2", "status": "superseded", "one_liner": "Conservative ridge adaptive"},
     {"id": "gpt_raw_adaptive_v21_pack_B", "status": "superseded_by_v22", "one_liner": "Confidence-scaled + residual pass"},
     {"id": "gpt_raw_adaptive_v22_pack_D", "status": "current", "one_liner": "Stronger residual + softer ratio thresholds"},
-    {"id": "batch_defringe_v4", "status": "probe_not_promoted", "one_liner": "Per-frame one mask: linescan peak+edges + prior guesses + leftover FFT"}
+    {"id": "batch_defringe_v4", "status": "probe_not_promoted", "one_liner": "Haj Grant full stacks written; ChanA/B removed RMS uncorrelated (r~0); not a promote"}
   ],
   "handoffs": {
     "support": "notes/HANDOFF_SUPPORT.md — retrain on inputs/defringed_v22",

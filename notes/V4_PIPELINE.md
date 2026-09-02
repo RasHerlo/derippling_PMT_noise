@@ -153,4 +153,8 @@ Full stack → `<channel>/defringe_v4/` (`*_defringed_v4.tif`, `*_removed_v4.tif
 `per_frame.csv`, `overview.pdf`). Seed-10 → `defringe_v4/seed10/`.
 
 Seed-10 Haj Grant (2026-09-02): ChanA 160 linescan peak fx 15.2 + edges 12.1 /
-18.4, RMS 17.9. ChanB catalog q=81. Inspect PDFs under `seed10/overview.pdf`.
+18.4, RMS 17.9. ChanB catalog q=81.
+
+Full Haj Grant (same night): ChanA 99.2% active, median RMS 8.94; ChanB 95.5%,
+6.43. Removed RMS Pearson r = −0.004 (live −0.035). Overlay
+`DATA/defringe_v4_rms_ChanA_ChanB.pdf`. Not a promote.

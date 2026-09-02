@@ -1,3 +1,26 @@
+# Progress handoff — 2026-09-02 night
+
+Pickup: **`notes/HANDOFF.md`**. v4 full Haj Grant stacks are written
+(`defringe_v4/`, not v22). Production remains v2.2.
+
+ChanA: **99.2%** frames active, median removed RMS **8.94**. Inspect:
+shutter 756/758/760, strong 407, weak 403, empty 292, brake 1134,
+most-lines 1288.
+
+ChanB: **95.5%** active, median RMS **6.43**. Catalog branch C q=81.
+Inspect: shutter 756/758/760, strong 424, weak 1427, empty 688, brake 19,
+most-lines 99.
+
+Removed RMS is **not coordinated** across PMTs (Pearson r = **−0.004** all
+frames, **−0.035** live; best lag ±20 still r=0.03). Shared shutter window
+756–760 is experiment timing only. Overlay:
+`DATA/defringe_v4_rms_ChanA_ChanB.pdf`.
+
+Do not promote. Leftover FFT on ChanA 160 still added greedy fx q=40 after
+the real 15.2+edges.
+
+---
+
 # Progress handoff — 2026-09-02 evening
 
 Pickup: **`notes/HANDOFF.md`** + **`notes/V4_PIPELINE.md`**.

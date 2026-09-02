@@ -1,8 +1,8 @@
-# Pickup — 2026-09-02 evening
+# Pickup — 2026-09-02 night
 
-**v4 engine is coded** (`batch_defringe/process_v4.py`). Production remains
-v2.2 `defringe_v22`. v3 `defringe_v3/` is a probe. Do not overwrite those
-TIFFs. Design: `notes/V4_PIPELINE.md`, schematic `v4_pipeline_schematic.pdf`.
+**v4 Haj Grant full stacks are written.** Production remains v2.2
+`defringe_v22`. v3 `defringe_v3/` is a probe. Do not overwrite those TIFFs.
+Design: `notes/V4_PIPELINE.md`, schematic `v4_pipeline_schematic.pdf`.
 
 ```
 python -m batch_defringe.process_v4 --root "F:\\bPACNewData2026\\Haj Grant Example"
@@ -39,15 +39,18 @@ guess → linescan **center peak** (`seed_peak_mask`) → **edge/segment qs**
 from the same traces → leftover FFT. Peak pieces are thin conjugate blobs
 (α-scaled). Ridge pieces are pack_D local excess. No stack q-tracker.
 
-**ChanA and ChanB are not coupled.** Fringe families differ (Haj Grant
-seed-10: ChanA no catalog, shutter fy 10/30, live often fx ~15; ChanB
-catalog q=81, shutter 81/162). A shared shutter *time* window (756–760)
-is the same experiment’s mechanical shutter, not a shared fringe. Seed-10
-reused ChanA `seed_compare` indices on ChanB for convenience only. The
-full-stack overview picks inspect frames **per channel**.
+**ChanA and ChanB are not coupled.** Quantified on Haj Grant v4
+`per_frame.csv`: removed-RMS Pearson **r = −0.004** (live **−0.035**).
+Fringe families also differ (ChanA no catalog, shutter fy 10/30, live often
+fx ~15; ChanB catalog q=81, shutter 81/162). A shared shutter *time* window
+(756–760) is the same experiment’s mechanical shutter, not a shared fringe.
+Seed-10 reused ChanA `seed_compare` indices on ChanB for convenience only.
+Full-stack inspect frames are **per channel**. Overlay:
+`DATA/defringe_v4_rms_ChanA_ChanB.pdf`.
 
 v3 still union-applies separate pack_D families with a stack q-tracker.
-Do not promote v4 until the Haj Grant full-stack PDFs are reviewed.
+Do not promote v4 until leftover FFT (greedy fx q=40 on ChanA 160) is
+judged on the full-stack PDFs.
 
 ## Known fringe features (how we treat them)
 
@@ -80,10 +83,10 @@ ChanA/B both land on **756–760**. Image-test still vetoes shutter q on live.
 Protocol slot is still `raw → v2.2 pack_D → SUPPORT retrain → suite2p`.
 v4 is the agreed next cleaner (per-frame one mask). Not a promote.
 
-| Channel (Haj Grant Example) | Production `defringe_v22` | v4 seed-10 (2026-09-02) |
+| Channel (Haj Grant Example) | Production `defringe_v22` | v4 full stack (2026-09-02) |
 |---|---|---|
-| ChanB | **ok**, q≈81 | Catalog branch C q=81 used where it hydrates. 1061 no longer empty (fy peak ~7). |
-| ChanA | **needs_review** | 160: linescan peak fx **15.2** + edge bands 12.1/18.4, RMS **17.9** (was 1.98 when pack_D columns stood in for linescan). Leftover FFT still added greedy fx q=40 after that. |
+| ChanB | **ok**, q≈81 | **95.5%** active, median RMS **6.43**. Catalog C q=81. Inspect 424/1427/688/19/99. |
+| ChanA | **needs_review** | **99.2%** active, median RMS **8.94**. 160 seed-10: fx peak **15.2** + edges 12.1/18.4. Inspect 407/403/292/1134/1288. |
 
 Frames **756–760** on Haj Grant are the auto-detected shutter quiet window
 (contrast cliff). Still not an inventory of the stack. Same window on both
@@ -186,11 +189,10 @@ inspect pages. Tests: `python tests/test_process_v3.py`.
 
 ## Next
 
-1. Review Haj Grant full-stack `defringe_v4/overview.pdf` (ChanA and ChanB).
-   Inspect frames are per channel (shutter mid/start/end, strong, weak, empty,
-   brake, most-lines) — not the ChanA seed_compare ten.
+1. Review Haj Grant `defringe_v4/overview.pdf` (ChanA and ChanB). Inspect
+   frames are per channel, not the ChanA seed_compare ten.
 2. Watch leftover FFT (ChanA 160 still accepted greedy fx q=40 after the
-   real 15.2+edges). Do not promote until then.
+   real 15.2+edges). Do not promote.
 3. Later: x-walk as a proposer only — overlapping windows, **no tile cleans**.
 
 ## Catalog (unchanged)
@@ -210,6 +212,7 @@ In-stack shutter is incomplete (set `frames`). Amplitude is never copied.
 ## Probe artifacts (not in git)
 
 ```
+F:\...\DATA\defringe_v4_rms_ChanA_ChanB.pdf
 F:\...\ChanA\defringe_v4\overview.pdf
 F:\...\ChanB\defringe_v4\overview.pdf
 F:\...\ChanA\defringe_v4\seed10\overview.pdf
