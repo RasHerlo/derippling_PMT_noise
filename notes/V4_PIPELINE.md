@@ -102,6 +102,40 @@ Each step: one FFT notch → `predicted`, `removed`, leftover.
 α rungs: few (about 3 live, 4 shutter). Spend budget on **adding lines in
 certainty order**.
 
+### Congruence (angles)
+
+H, V, and both diagonals always run. Hypotheses: **fx** (vertical stripes →
+`qx` from the **horizontal** cut, `qy=0`; the vertical cut may be quiet),
+**fy** (horizontal bands → `qy` from the vertical cut), **tilted** (both).
+Score = mean relative error of predicted vs measured diagonal periods.
+Winner score **> 0.25** → **none** (typical shutter 2-D ridge). Skip
+linescan center/edges; still catalog, shutter-learn, leftover FFT.
+
+### α
+
+Cap on FFT attenuation. Rungs **0.28 → 0.55 → 0.85** (shutter + **1.00**).
+**0.28** is ~⅓ of pack_D full 0.85 — a chosen first rung, not measured.
+Lines are added at 0.28 into **one** mask; then α is raised **collectively**
+on the accepted set. v2.2 had per-family `gate` / `eff_max_alpha`. v4 ridge
+lines still use pack_D **gate** (skip if 0); peak pieces do not. Shared α
+only. Per-line α is an open probe (below).
+
+### Predicted vs removed (RMSE / L2)
+
+`predicted` = IFFT of energy the mask attenuates. `removed` = raw − cleaned.
+All over **every pixel of that frame**:
+
+- `RMS(pred)` = √ mean(pred²) — one scalar for the whole image
+- `RMSE` = √ mean((removed − pred)²) — L2 (sum-of-squares) distance
+- `agree` = 1 − RMSE / (RMS(pred) + RMS(removed)); live keep if **≥ 0.40**
+
+Removed RMS vs 0 is heaviness, not this test.
+
+### (fx, fy) across frames
+
+No stack q-tracker. Intra-frame ridge snap only: live **±10** bins, shutter
+**±2**. `Q_CLUSTER_TOL=3` merges duplicates on the **same** frame.
+
 ### 4. Write the frame
 
 Cleaned, removed, predicted, applied heatmap, rung log (which lines, α,
@@ -138,6 +172,37 @@ does not have, that step is a fail even if RMS went up.
 
 ---
 
+## Dest batch (`--out`) · USB drives · progress
+
+```
+python -m batch_defringe.process_v4 --root "E:\Rasmus-Guillermo\ECF1" --out "F:\CollectedData"
+```
+
+Source under `E:\Rasmus-Guillermo` is **write-guarded**. Only folder structure,
+`Experiment.xml`, cleaned TIFF, slim PDF, `per_frame.csv`, `families.json`,
+`mask_recipe.json`, and `mask_patterns.npz` land on `--out`. Complete dest
+folders are skipped on resume.
+
+**USB drop handling (in-script):** a background keepalive listdir’s the source
+(read-only) and writes `F:\CollectedData\.defringe_v4_runs\keepalive.txt` every
+20 s so disks are less likely to sleep. A stack is retried 3× on drive I/O
+(`Permission denied`, `0 written`, vanished root), waiting up to 3 min for the
+drive. After 3 consecutive drive failures the batch **stops** (does not walk
+the rest of the job list). Windows USB-selective-suspend off is still the
+stronger OS-level fix; the script does not change power settings.
+
+**Progress:** console lines include stack i/N, ok/skip/err, elapsed, ETA this
+stack and batch. Watch (refresh) either:
+
+- repo `.defringe_progress.txt` (and `.json`)
+- `{out}/.defringe_v4_runs/<utc>/progress.txt`
+
+Permission-denied / incomplete dests are listed for later retry in
+`notes/V4_DEST_CATCHUP.md` and `{out}/.defringe_v4_runs/catchup.md`. Same
+`--out` command with skip-existing redoes any dest that is not complete.
+
+---
+
 ## Implementation
 
 Engine: `batch_defringe/process_v4.py`. Report: `batch_defringe/v4_report.py`.
@@ -158,3 +223,12 @@ Seed-10 Haj Grant (2026-09-02): ChanA 160 linescan peak fx 15.2 + edges 12.1 /
 Full Haj Grant (same night): ChanA 99.2% active, median RMS 8.94; ChanB 95.5%,
 6.43. Removed RMS Pearson r = −0.004 (live −0.035). Overlay
 `DATA/defringe_v4_rms_ChanA_ChanB.pdf`. Not a promote.
+
+---
+
+## Open: per-line α (not in v4)
+
+v4 raises **one** `max_alpha` on the whole accepted set. v2.2 / pack_D did
+**per-family** `gate` and `eff_max_alpha` (see `per_frame.csv` `family{i}_*`).
+A later probe could keep one mask but let each line have its own α, so a
+dubious leftover is not pushed as hard as the linescan core. Not implemented.

@@ -103,6 +103,8 @@ def write_v4_report(
     means_title: str = "Means of the stack",
     shutter_subtitle: str | None = None,
     list_cover_frames: bool = False,
+    slim: bool = False,
+    dest_note: str | None = None,
 ) -> Path:
     import matplotlib
 
@@ -134,8 +136,17 @@ def write_v4_report(
     with PdfPages(path) as pdf:
         fig.clear()
         fig.patch.set_facecolor("white")
-        fig.text(0.06, 0.97, f"{title}  ·  {channel}", fontsize=14, fontweight="bold", va="top")
+        fig.text(
+            0.06,
+            0.97,
+            f"{title}  ·  {channel}" + ("  ·  slim QC" if slim else ""),
+            fontsize=14,
+            fontweight="bold",
+            va="top",
+        )
         fig.text(0.06, 0.935, f"{tif_path}  ·  {computer}", fontsize=8, va="top", color="0.35")
+        if dest_note:
+            fig.text(0.06, 0.912, dest_note, fontsize=7.5, va="top", color="0.4")
         sm = summary
         frac = sm.get("frac_frames_any_active")
         lines = [
@@ -155,8 +166,15 @@ def write_v4_report(
                 "inspect: "
                 + ", ".join(f"{d.get('frame')}={d.get('why')}" for d in inspect_note)
             )
+        if slim:
+            lines.append("Rung stories omitted; see mask_recipe.json + mask_patterns.npz.")
         lines.extend(["", "frame  role         lines  α     RMS      agree  brake  seed"])
-        cover_rows = inspect if not list_cover_frames else rows
+        if slim or list_cover_frames:
+            inspect_ids = {int(d["frame"]) for d in (sm.get("inspect") or []) if d.get("frame") is not None}
+            cover_rows = [r for r in rows if int(r["frame"]) in inspect_ids] if inspect_ids else rows
+        else:
+            cover_rows = inspect if inspect else rows
+        y0 = 0.88 if dest_note else 0.90
         for r in cover_rows[:18]:
             seed = r.get("seed") or {}
             win = seed.get("winner") or r.get("seed_winner") or "none"
@@ -165,7 +183,7 @@ def write_v4_report(
                 f"{float(r['max_alpha']):.2f}  {float(r['removed_rms']):8.3g}  "
                 f"{float(r['agree']):.2f}   {int(bool(r['brake']))}    {win}"
             )
-        fig.text(0.06, 0.90, "\n".join(lines), fontsize=8, va="top", family="monospace")
+        fig.text(0.06, y0, "\n".join(lines), fontsize=8, va="top", family="monospace")
         pdf.savefig(fig, dpi=140)
 
         draw_shutter_page(
@@ -212,6 +230,10 @@ def write_v4_report(
         _imshow(fig.add_subplot(gs[2]), mean_removed, signed=True, title="mean removed")
         _imshow(fig.add_subplot(gs[3]), mean_predicted, signed=True, title="mean predicted")
         pdf.savefig(fig, dpi=140)
+
+        if slim:
+            plt.close(fig)
+            return path
 
         for r in inspect:
             fi = int(r["frame"])

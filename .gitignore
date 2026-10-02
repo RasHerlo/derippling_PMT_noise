@@ -225,6 +225,8 @@ vendor/
 
 # Batch defringe cache if someone points --root at the repo itself
 .defringe_cache/
+.defringe_progress.txt
+.defringe_progress.json
 
 # Dark-current figure output if someone points --root at the repo itself
 .darkcurrent_analysis/
